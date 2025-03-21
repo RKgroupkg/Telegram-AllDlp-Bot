@@ -1,0 +1,162 @@
+name: Test Telegram Bot
+
+# Simplified workflow that runs manually
+on:
+  workflow_dispatch:
+    inputs:
+      debug_enabled:
+        description: 'Enable debug logging'
+        required: false
+        default: false
+        type: boolean
+      test_duration:
+        description: 'Maximum test duration (minutes)'
+        required: false
+        default: '5'
+        type: string
+      python_version:
+        description: 'Python version'
+        required: false
+        default: '3.10'
+        type: choice
+        options:
+          - '3.9'
+          - '3.10'
+          - '3.11'
+          - '3.12'
+
+jobs:
+  test-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(github.event.inputs.test_duration || '5') }}
+    
+    # Add concurrency group to allow cancellation of previous runs
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1  # Shallow clone for faster checkout
+    
+    - name: Set up Python ${{ github.event.inputs.python_version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ github.event.inputs.python_version }}
+        cache: 'pip'  # Automatically handle pip caching
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        if [ -f requirements.txt ]; then
+          pip3 install -U -r requirements.txt
+        else
+          echo "::warning::No requirements.txt found. Please add one for proper dependency management."
+          # Install pyrogram as fallback since we know it's a pyrogram bot
+          pip install pyrogram tgcrypto
+        fi
+        # Install testing tools
+        pip install pytest pytest-cov pylint
+    
+    - name: Verify required secrets
+      run: |
+        MISSING_SECRETS=()
+        
+        if [ -z "${{ secrets.API_ID }}" ]; then
+          MISSING_SECRETS+=("API_ID")
+        fi
+        if [ -z "${{ secrets.API_HASH }}" ]; then
+          MISSING_SECRETS+=("API_HASH")
+        fi
+        if [ -z "${{ secrets.BOT_TOKEN }}" ]; then
+          MISSING_SECRETS+=("BOT_TOKEN")
+        fi
+        
+        if [ ${#MISSING_SECRETS[@]} -ne 0 ]; then
+          echo "::error::Missing required secrets: ${MISSING_SECRETS[*]}"
+          echo "Please add these secrets in your GitHub repository settings."
+          exit 1
+        fi
+    
+    - name: Run Telegram bot
+      id: run-bot
+      env:
+        # Access all your secret variables
+        API_ID: ${{ secrets.API_ID }}
+        API_HASH: ${{ secrets.API_HASH }}
+        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        # Add commonly used Telegram bot environment variables
+        MONGO_URI: ${{ secrets.MONGO_URI }}
+        SUDO_USERID: ${{ secrets.SUDO_USERID }}
+        OWNER_USERID: ${{ secrets.OWNER_USERID }}
+        # Add test duration as environment variable
+        TEST_DURATION_MINUTES: ${{ github.event.inputs.test_duration || '5' }}
+        # Add Python path
+        PYTHONPATH: ${{ github.workspace }}
+      run: |
+        echo "Starting Telegram bot test run..."
+        echo "Python version: $(python --version)"
+        echo "Working directory: $(pwd)"
+        echo "Test duration: $TEST_DURATION_MINUTES minutes"
+        
+        # Create a wrapper script for timeout handling
+        cat > run_with_timeout.sh << 'EOF'
+        #!/bin/bash
+        TIMEOUT=$((${TEST_DURATION_MINUTES:-5} * 60))
+        echo "Running bot with ${TIMEOUT}s timeout..."
+        
+        # Run the bot using python3 -m TelegramBot
+        python3 -m TelegramBot "${@}" &
+        BOT_PID=$!
+        
+        # Create trap to handle cleanup
+        trap "echo 'Stopping bot...'; kill -SIGTERM $BOT_PID 2>/dev/null; exit 0" SIGINT SIGTERM
+        
+        # Wait for timeout or external cancellation
+        sleep $TIMEOUT &
+        SLEEP_PID=$!
+        wait $SLEEP_PID
+        
+        # Timeout reached, kill the bot
+        echo "Test duration reached, stopping bot..."
+        kill -SIGTERM $BOT_PID 2>/dev/null
+        exit 0
+        EOF
+        
+        chmod +x run_with_timeout.sh
+        
+        # Run with appropriate flags based on debug setting
+        echo "------- BOT OUTPUT LOG START -------"
+        if [ "${{ github.event.inputs.debug_enabled }}" == "true" ]; then
+          echo "Running in DEBUG mode"
+          ./run_with_timeout.sh --debug | tee bot_output.log
+        else
+          echo "Running in NORMAL mode"
+          ./run_with_timeout.sh | tee bot_output.log
+        fi
+        echo "------- BOT OUTPUT LOG END -------"
+    
+    - name: Upload logs
+      if: always()  # Run even if previous steps failed
+      uses: actions/upload-artifact@v4
+      with:
+        name: bot-logs-${{ github.run_id }}
+        path: |
+          *.log
+          logs/
+          log/
+        if-no-files-found: warn
+    
+    - name: Summarize test run
+      if: always()
+      run: |
+        echo "## Telegram Bot Test Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Duration**: ${{ github.event.inputs.test_duration || '5' }} minutes" >> $GITHUB_STEP_SUMMARY
+        echo "- **Python Version**: ${{ github.event.inputs.python_version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Debug Mode**: ${{ github.event.inputs.debug_enabled }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Bot Execution**: \`python3 -m TelegramBot\`" >> $GITHUB_STEP_SUMMARY
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "To stop this test run early, you can cancel the workflow from the Actions page." >> $GITHUB_STEP_SUMMARY
