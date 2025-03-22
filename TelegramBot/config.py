@@ -21,7 +21,40 @@ for env_file in env_files:
 if not env_loaded:
     logger.info("No .env file found, using system environment variables")
 
+# Helper function to handle both direct env vars and .env format
+def parse_json_env(key, default=None):
+    value = getenv(key, "")
+    logger.debug(f"Raw value for {key}: {repr(value)}")  # Show exact string with quotes
+    
+    if not value:
+        logger.debug(f"No value found for {key}, using default")
+        return default if default is not None else []
+    
+    # Clean up the value
+    value = value.strip()
+    
+    # Check if it looks like JSON
+    if (value.startswith('[') and value.endswith(']')) or \
+       (value.startswith('{') and value.endswith('}')):
+        try:
+            parsed = json.loads(value)
+            logger.debug(f"Successfully parsed {key}: {parsed}")
+            return parsed
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse {key}: {e}")
+            logger.error(f"Problematic value: {repr(value)}")
+            return default if default is not None else []
+    
+    # Fallback for non-JSON values
+    try:
+        return [int(value)]  # For single integer values
+    except ValueError:
+        return [value]  # Return as single string item
+    
+    
 # Load configuration
+RAPID_API_KEYS = parse_json_env("RAPID_API_KEYS")
+
 API_ID = int(getenv("API_ID", 0))
 API_HASH = getenv("API_HASH", "")
 BOT_TOKEN = getenv("BOT_TOKEN", "")

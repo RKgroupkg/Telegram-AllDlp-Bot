@@ -1,5 +1,7 @@
 from TelegramBot.version import (__python_version__, __version__, __pyro_version__, __license__)
 
+
+BOT_NAME = "@Quick_dlbot"
 USER_TEXT = """
 🗒️️ 𝙳𝚘𝚌𝚞𝚖𝚎𝚗𝚝𝚊𝚝𝚒𝚘𝚗 𝚏𝚘𝚛 𝚌𝚘𝚖𝚖𝚊𝚗𝚍𝚜 𝚊𝚟𝚊𝚒𝚕𝚊𝚋𝚕𝚎 𝚝𝚘 𝚞𝚜𝚎𝚛'𝚜
 

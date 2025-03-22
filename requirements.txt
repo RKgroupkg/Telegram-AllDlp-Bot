@@ -13,3 +13,6 @@ motor
 bs4
 uvloop
 pillow
+spotDL
+ffmeg
+yt_dlp
