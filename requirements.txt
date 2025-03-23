@@ -14,5 +14,5 @@ bs4
 uvloop
 pillow
 spotDL
-ffmeg
+ffmpeg
 yt_dlp
