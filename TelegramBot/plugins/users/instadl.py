@@ -1,6 +1,6 @@
 import re
 import asyncio
-from typing import Union, List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any
 import uuid
 
 from pyrogram import Client, filters, enums
