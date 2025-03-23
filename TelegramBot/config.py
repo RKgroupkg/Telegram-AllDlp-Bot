@@ -59,6 +59,15 @@ API_ID = int(getenv("API_ID", 0))
 API_HASH = getenv("API_HASH", "")
 BOT_TOKEN = getenv("BOT_TOKEN", "")
 
+# YT config
+COOKIE_ROTATION_COOLDOWN :int = int(getenv("COOKIE_ROTATION_COOLDOWN", "600"))
+DEFAULT_COOKIES_DIR : str = getenv("DEFAULT_COOKIES_DIR", "./cookies")
+YT_PROGRESS_UPDATE_INTERVAL : int = int(getenv("YT_PROGRESS_UPDATE_INTERVAL", "5"))
+YT_DOWNLOAD_PATH : str= getenv("YT_DOWNLOAD_PATH", "./tmp")
+MAX_VIDEO_LENGTH_MINUTES : int = int(getenv("MAX_VIDEO_LENGTH_MINUTES","15"))
+
+
+
 # Helper function to handle both direct env vars and .env format
 def parse_json_env(key, default=None):
     value = getenv(key, "")

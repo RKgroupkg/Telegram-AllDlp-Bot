@@ -6,10 +6,10 @@ import time
 from TelegramBot.helpers.dlp.yt_dl.utils import YT_LINK_REGEX
 from TelegramBot.helpers.dlp.yt_dl.chach import clean_expired_cache
 from TelegramBot.helpers.dlp.yt_dl.callback import handle_youtube_link, handle_youtube_callback
-from TelegramBot.helpers.filters import is_ratelimited
-from TelegramBot.logging import LOGGER
+from TelegramBot.helpers.filters import is_ratelimiter_dl
 from TelegramBot.helpers.filters import sudo_cmd
 
+from TelegramBot.logging import LOGGER
 logger = LOGGER(__name__)
 
 # Clean expired cache periodically
@@ -46,7 +46,7 @@ async def clean_cache_command(client: Client, message: Message):
     )
 
 # YouTube download command
-@Client.on_message(filters.command(["youtube", "yt", "ytdl"]) & ~filters.bot & is_ratelimited)
+@Client.on_message(filters.command(["youtube", "yt", "ytdl"]) & ~filters.bot & is_ratelimiter_dl)
 async def youtube_command(client: Client, message: Message):
     """Handle YouTube download command"""
     
@@ -76,7 +76,7 @@ async def youtube_command(client: Client, message: Message):
         )
 
 # YouTube link detection
-@Client.on_message(filters.regex(YT_LINK_REGEX) & filters.text & ~filters.bot & is_ratelimited)
+@Client.on_message(filters.regex(YT_LINK_REGEX) & filters.text & ~filters.bot & is_ratelimiter_dl)
 async def youtube_link_detector(client: Client, message: Message):
     """Detect and handle YouTube links in messages"""
     await handle_youtube_link(client, message)
@@ -88,7 +88,7 @@ async def youtube_callback_handler(client: Client, callback_query: CallbackQuery
     await handle_youtube_callback(client, callback_query)
 
 # Command to show statistics about the YouTube downloader
-@Client.on_message(filters.command(["ytstats"]) & is_ratelimited)
+@Client.on_message(filters.command(["ytstats"]))
 async def yt_stats_command(client: Client, message: Message):
     """Show statistics about the YouTube downloader"""
     from TelegramBot.helpers.dlp.yt_dl.chach import callback_cache, video_info_cache

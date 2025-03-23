@@ -15,13 +15,22 @@ class RateLimiter:
     (https://pypi.org/project/pyrate-limiter/)
     """
 
-    def __init__(self, seconds: int, minutes: int) -> None:
+    def __init__(self, limit_sec: int,limit_min: int, interval_sec: int = Duration.SECOND, interval_min: int = Duration.MINUTE) -> None:
+        """Request rate definition.
+
+            Args:
+                limit_sec: Number of requests allowed within ``interval``
+                limit_min: Number of requests allowed within ``interval``
+                interval_sec: Time interval, in seconds
+                interval_min: Time interval, in minute
+                
+        """
 
         # 2 requests per seconds (default).
-        self.second_rate = RequestRate(seconds, Duration.SECOND)
+        self.second_rate = RequestRate(limit_sec,interval_sec)
 
         # 19 requests per minute (default).
-        self.minute_rate = RequestRate(minutes, Duration.MINUTE)
+        self.minute_rate = RequestRate(limit_min,interval_min)
 
         self.limiter = Limiter(
             self.second_rate,

@@ -554,14 +554,14 @@ async def start_download(client, callback_query, message, video_id, format_id, i
         if active_downloads.get(user_id, {}).get('cancelled', False):
             if 'result' in locals() and 'file_path' in result and result['file_path']:
                 clean_temporary_file(result['file_path'])
-            process_next_in_queue(client, user_id, message)
+            await process_next_in_queue(client, user_id, message)
             return
         
         if not result['success']:
             await message.edit_text(
                 f"❌ Download failed after {MAX_RETRIES} attempts: {result.get('error', 'Unknown error')}"
             )
-            process_next_in_queue(client, user_id, message)
+            await process_next_in_queue(client, user_id, message)
             return
         
         # Upload the file to Telegram
@@ -579,7 +579,7 @@ async def start_download(client, callback_query, message, video_id, format_id, i
                 await client.send_audio(
                     chat_id=message.chat.id,
                     audio=file_path,
-                    caption=f"🎵 **{title}**\n\nDownloaded via @{(await client.get_me()).username}",
+                    caption=f"🎵 **{title}**\n\n__Downloaded via__ @{(await client.get_me()).username}",
                     file_name=f"{title}.{ext}",
                     reply_to_message_id=callback_query.message.reply_to_message.id if callback_query.message.reply_to_message else None
                 )
@@ -587,7 +587,7 @@ async def start_download(client, callback_query, message, video_id, format_id, i
                 await client.send_video(
                     chat_id=message.chat.id,
                     video=file_path,
-                    caption=f"🎬 **{title}**\n\nDownloaded via @{(await client.get_me()).username}",
+                    caption=f"🎬 **{title}**\n\n__Downloaded via__ @{(await client.get_me()).username}",
                     file_name=f"{title}.{ext}",
                     reply_to_message_id=callback_query.message.reply_to_message.id if callback_query.message.reply_to_message else None
                 )
@@ -606,7 +606,7 @@ async def start_download(client, callback_query, message, video_id, format_id, i
                 logger.error(f"Error cleaning up temporary file: {e}")
             
             # Process next queued download if any
-            process_next_in_queue(client, user_id, message)
+            await process_next_in_queue(client, user_id, message)
     except Exception as e:
         error_trace = traceback.format_exc()
         logger.error(f"Error handling YouTube download: {e}\n{error_trace}")
@@ -656,7 +656,7 @@ async def process_next_in_queue(client, user_id, message):
             info = get_video_info_from_cache(video_id)
             if not info:
                 await message.edit_text("❌ Queued video information expired. Please try again.")
-                process_next_in_queue(client, user_id, message)
+                await process_next_in_queue(client, user_id, message)
                 return
                 
             # Find selected format
@@ -668,7 +668,7 @@ async def process_next_in_queue(client, user_id, message):
                     
             if not selected_format:
                 await message.edit_text("❌ Queued format not available anymore.")
-                process_next_in_queue(client, user_id, message)
+                await process_next_in_queue(client, user_id, message)
                 return
                 
             # Create a simulated callback query

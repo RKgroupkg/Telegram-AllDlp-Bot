@@ -22,8 +22,9 @@ def sudo_users(_, __, message: Message) -> bool:
 
 # ratelimit filter
 
-chatid_ratelimiter = RateLimiter(seconds=1, minutes=19)
-global_ratelimiter = RateLimiter(seconds=30, minutes=1800)
+chatid_ratelimiter = RateLimiter(limit_sec=1,limit_min=20,interval_sec=1,interval_min=60)
+global_ratelimiter = RateLimiter(limit_sec=30,limit_min=1800,interval_sec=1,interval_min=60)
+dl_ratelimiter = RateLimiter(limit_sec=1,limit_min=5,interval_sec=1,interval_min=60)
 
 
 async def ratelimiter(_, __, update: Union[Message, CallbackQuery]) -> bool:
@@ -64,7 +65,41 @@ async def ratelimiter(_, __, update: Union[Message, CallbackQuery]) -> bool:
 
     return True
 
+
+async def ratelimiter_dl(_, __, update: Union[Message, CallbackQuery]) -> bool:
+    """
+    This filter will monitor the new messages or callback queries updates and ignore them if the
+    bot is about to hit the rate limit.
+    https://telegra.ph/So-your-bot-is-rate-limited-01-26
+
+    params:
+        update (`Message | CallbackQuery`): The update to check for rate limit.
+
+    returns:
+        bool: True if the bot is not about to hit the rate limit, False otherwise.
+    """
+
+    is_global_limited = await global_ratelimiter.acquire("globalupdate")
+
+    if is_global_limited:
+        return False
+
+    chatid = update.chat.id if isinstance(update, Message) else update.message.chat.id
+    chat_type = update.chat.type if isinstance(update, Message) else update.message.chat.type
+
+    if chat_type != ChatType.PRIVATE:
+        is_chatid_limited = await dl_ratelimiter.acquire(chatid)
+
+        if is_chatid_limited:
+            if isinstance(update, CallbackQuery):
+                await update.answer("Bot is getting too many requests for download, please try again later.", show_alert=True)
+            return False
+
+    return True
+
+
 # creating filters.
 dev_cmd = filters.create(dev_users)
 sudo_cmd = filters.create(sudo_users)
 is_ratelimited = filters.create(ratelimiter)
+is_ratelimiter_dl = filters.create(ratelimiter_dl)

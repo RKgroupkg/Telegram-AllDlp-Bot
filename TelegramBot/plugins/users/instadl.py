@@ -17,7 +17,7 @@ from pyrogram.types import (
     InlineQueryResultVideo,
     InputTextMessageContent
 )
-from TelegramBot.helpers.filters import is_ratelimited
+from TelegramBot.helpers.filters import is_ratelimited,is_ratelimiter_dl
 from TelegramBot.helpers.dlp.Insta_dl.insta_dl import get_instagram_post_data
 from TelegramBot.helpers.decorators import catch_errors
 
@@ -103,7 +103,7 @@ def instagram_link_filter(_, __, message: Message) -> bool:
 instagram_filter = filters.create(instagram_link_filter)
 
 
-@Client.on_message(instagram_filter & ~filters.bot & ~filters.via_bot & filters.incoming & is_ratelimited)
+@Client.on_message(instagram_filter & ~filters.bot & ~filters.via_bot & filters.incoming & is_ratelimiter_dl)
 @catch_errors
 async def instagram_downloader_handler(client: Client, message: Message) -> None:
     """
@@ -282,7 +282,7 @@ async def instagram_downloader_handler(client: Client, message: Message) -> None
 
 
 # Alternative command to manually trigger download for a specific Instagram link
-@Client.on_message(filters.command(["instagram", "insta", "igdl"]) & is_ratelimited)
+@Client.on_message(filters.command(["instagram", "insta", "igdl"]) & is_ratelimiter_dl)
 @catch_errors
 async def instagram_command_handler(client: Client, message: Message) -> None:
     """
