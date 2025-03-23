@@ -6,3 +6,4 @@ TelegramBot.session
 TelegramBot.session-journal
 log.txt
 config.env
+cookies.txt
