@@ -1,6 +1,7 @@
 venv/*
 .vscode/*
 *.pyc
-config.env
+*.env
 TelegramBot.session
 TelegramBot.session-journal
+log.txt
