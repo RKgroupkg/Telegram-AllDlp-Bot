@@ -112,7 +112,7 @@ def generate_format_buttons(formats: List[Dict[str, Any]], page: int = 0, items_
         info_callback_id = store_callback_data(info_data)
         pagination_buttons.append(
             InlineKeyboardButton(
-                text=f"📄 {page+1}/{total_pages}",
+                text=f"▢ {page+1}/{total_pages}",
                 callback_data=f"ytinfo_{info_callback_id}"
             )
         )
@@ -185,7 +185,7 @@ def generate_format_buttons(formats: List[Dict[str, Any]], page: int = 0, items_
         cancel_callback_id = store_callback_data(cancel_data)
         buttons.append([
             InlineKeyboardButton(
-                text="❌ Cancel",
+                text="✖ Cancel",
                 callback_data=f"ytcancel_{cancel_callback_id}"
             )
         ])

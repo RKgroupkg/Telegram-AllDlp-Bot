@@ -1,1 +1,69 @@
-python3 -m TelegramBot
+#!/usr/bin/env bash
+
+# Colors for output formatting
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+# Function to display error messages and exit
+error_exit() {
+    echo -e "${RED}ERROR: $1${NC}" >&2
+    exit 1
+}
+
+# Function to display warnings
+warn() {
+    echo -e "${YELLOW}WARNING: $1${NC}" >&2
+}
+
+# Function to display success messages
+success() {
+    echo -e "${GREEN}$1${NC}"
+}
+
+# Check if not running on Windows
+check_os() {
+    echo "Checking operating system..."
+    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" || "$OSTYPE" == "cygwin" ]]; then
+        error_exit "This script is not designed to run on Windows. Please use Linux or macOS."
+    fi
+    success "Operating system check passed."
+}
+
+# Check if Python is installed and updated
+check_python() {
+    echo "Checking Python installation..."
+    if ! command -v python3 &> /dev/null; then
+        error_exit "Python 3 is not installed. Please install Python 3 and try again."
+    fi
+    
+    # Get Python version
+    PYTHON_VERSION=$(python3 --version 2>&1 | cut -d' ' -f2)
+    if [[ $(echo "$PYTHON_VERSION" | cut -d. -f1) -lt 3 || ($(echo "$PYTHON_VERSION" | cut -d. -f1) -eq 3 && $(echo "$PYTHON_VERSION" | cut -d. -f2) -lt 6) ]]; then
+        warn "Python version $PYTHON_VERSION detected. It's recommended to use Python 3.6 or newer."
+    else
+        success "Python $PYTHON_VERSION detected."
+    fi
+}
+
+# Run the Telegram Bot
+run_bot() {
+    echo "Starting Telegram Bot..."
+    if ! python3 -m TelegramBot; then
+        error_exit "Failed to run TelegramBot. Check the error messages above."
+    fi
+}
+
+# Main execution
+main() {
+    # Run all checks
+    check_os
+    check_python
+    
+    # Run the bot
+    run_bot
+}
+
+# Execute main function
+main

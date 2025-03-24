@@ -13,6 +13,6 @@ motor
 bs4
 uvloop
 pillow
-spotDL
+spotipy
 ffmpeg
 yt_dlp

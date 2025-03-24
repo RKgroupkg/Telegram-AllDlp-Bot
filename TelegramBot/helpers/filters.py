@@ -92,7 +92,9 @@ async def ratelimiter_dl(_, __, update: Union[Message, CallbackQuery]) -> bool:
 
         if is_chatid_limited:
             if isinstance(update, CallbackQuery):
-                await update.answer("Bot is getting too many requests for download, please try again later.", show_alert=True)
+                await update.answer("You have reached the limit. Please try again in few minutes.", show_alert=True)
+            elif isinstance(update, Message):
+                await update.reply_text("You have reached the limit. Please try again in few minutes.", quote=True)
             return False
 
     return True

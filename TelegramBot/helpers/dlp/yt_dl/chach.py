@@ -1,17 +1,61 @@
 import uuid
 import time
+import threading
+import logging
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 
 # Configuration constants
 CACHE_EXPIRY_HOURS = 1  # Cache expiry time in hours
 VIDEO_CACHE_EXPIRY_HOURS = 2  # Video info cache expiry time in hours
 CLEANUP_INTERVAL_SECONDS = 300  # Clean up every 5 minutes
 
-# Cache structures
-callback_cache: Dict[str, Dict[str, Any]] = {}
-video_info_cache: Dict[str, Dict[str, Any]] = {}
+# Logging configuration
+logger = logging.getLogger(__name__)
+
+# Thread-safe cache structures
+class ThreadSafeCache:
+    def __init__(self):
+        self._cache: Dict[str, Dict[str, Any]] = {}
+        self._lock = threading.RLock()
+    
+    def get(self, key: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            return self._cache.get(key)
+    
+    def set(self, key: str, value: Dict[str, Any]) -> None:
+        with self._lock:
+            self._cache[key] = value
+    
+    def delete(self, key: str) -> None:
+        with self._lock:
+            if key in self._cache:
+                del self._cache[key]
+    
+    def clear(self) -> int:
+        with self._lock:
+            count = len(self._cache)
+            self._cache.clear()
+            return count
+    
+    def items(self) -> Tuple:
+        with self._lock:
+            return tuple(self._cache.items())
+    
+    def keys(self) -> Tuple:
+        with self._lock:
+            return tuple(self._cache.keys())
+    
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._cache)
+
+
+# Initialize thread-safe cache structures
+callback_cache = ThreadSafeCache()
+video_info_cache = ThreadSafeCache()
 last_cleanup_time = time.time()
+cleanup_lock = threading.Lock()
 
 def generate_callback_id() -> str:
     """
@@ -21,7 +65,11 @@ def generate_callback_id() -> str:
         A unique ID as string
     """
     # Using uuid4 for better uniqueness while keeping it relatively short
-    return str(uuid.uuid4().int % 1000000).zfill(6)
+    # Added entropy by including timestamp to reduce collision probability
+    timestamp = int(time.time() * 1000) % 10000
+    random_id = uuid.uuid4().int % 1000000
+    combined = (timestamp * 1000000 + random_id) % 1000000
+    return str(combined).zfill(6)
 
 def store_callback_data(data: Dict[str, Any], expiry_hours: float = CACHE_EXPIRY_HOURS) -> str:
     """
@@ -36,11 +84,18 @@ def store_callback_data(data: Dict[str, Any], expiry_hours: float = CACHE_EXPIRY
     """
     _check_and_perform_cleanup()
     
-    callback_id = generate_callback_id()
-    callback_cache[callback_id] = {
+    # Ensure we get a unique ID that's not already in the cache
+    while True:
+        callback_id = generate_callback_id()
+        if callback_cache.get(callback_id) is None:
+            break
+    
+    callback_cache.set(callback_id, {
         'data': data,
         'expires_at': datetime.now() + timedelta(hours=expiry_hours)
-    }
+    })
+    
+    logger.debug(f"Stored callback data with ID: {callback_id}")
     return callback_id
 
 def get_callback_data(callback_id: str) -> Optional[Dict[str, Any]]:
@@ -53,15 +108,19 @@ def get_callback_data(callback_id: str) -> Optional[Dict[str, Any]]:
     Returns:
         Cached data or None if not found or expired
     """
-    if callback_id not in callback_cache:
+    cache_item = callback_cache.get(callback_id)
+    
+    if cache_item is None:
+        logger.debug(f"Callback ID not found: {callback_id}")
         return None
     
-    cache_item = callback_cache[callback_id]
     if datetime.now() > cache_item['expires_at']:
         # Clean up expired item
-        del callback_cache[callback_id]
+        callback_cache.delete(callback_id)
+        logger.debug(f"Callback data expired: {callback_id}")
         return None
     
+    logger.debug(f"Retrieved callback data: {callback_id}")
     return cache_item['data']
 
 def add_video_info_to_cache(video_id: str, info: Dict[str, Any]) -> None:
@@ -72,8 +131,11 @@ def add_video_info_to_cache(video_id: str, info: Dict[str, Any]) -> None:
         video_id: YouTube video ID
         info: Video information
     """
-    info['cached_at'] = datetime.now()
-    video_info_cache[video_id] = info
+    # Create a deep copy to prevent shared references
+    cache_info = info.copy()
+    cache_info['cached_at'] = datetime.now()
+    video_info_cache.set(video_id, cache_info)
+    logger.debug(f"Added video info to cache: {video_id}")
 
 def get_video_info_from_cache(video_id: str) -> Optional[Dict[str, Any]]:
     """
@@ -85,17 +147,22 @@ def get_video_info_from_cache(video_id: str) -> Optional[Dict[str, Any]]:
     Returns:
         Video information or None if not in cache or expired
     """
-    if video_id not in video_info_cache:
+    info = video_info_cache.get(video_id)
+    
+    if info is None:
+        logger.debug(f"Video info not in cache: {video_id}")
         return None
         
     # Check if cache is still valid
-    info = video_info_cache[video_id]
     cached_at = info.get('cached_at', datetime.min)
     if datetime.now() - cached_at > timedelta(hours=VIDEO_CACHE_EXPIRY_HOURS):
-        del video_info_cache[video_id]
+        video_info_cache.delete(video_id)
+        logger.debug(f"Video info expired: {video_id}")
         return None
-        
-    return info
+    
+    # Return a copy to prevent modification of cached data
+    logger.debug(f"Retrieved video info from cache: {video_id}")
+    return info.copy()
 
 def clear_video_info_cache() -> int:
     """
@@ -104,8 +171,8 @@ def clear_video_info_cache() -> int:
     Returns:
         Number of video info items cleared
     """
-    count = len(video_info_cache)
-    video_info_cache.clear()
+    count = video_info_cache.clear()
+    logger.info(f"Cleared video info cache: {count} items removed")
     return count
 
 def clear_callback_cache() -> int:
@@ -115,8 +182,8 @@ def clear_callback_cache() -> int:
     Returns:
         Number of callback items cleared
     """
-    count = len(callback_cache)
-    callback_cache.clear()
+    count = callback_cache.clear()
+    logger.info(f"Cleared callback cache: {count} items removed")
     return count
 
 def _check_and_perform_cleanup() -> None:
@@ -127,8 +194,16 @@ def _check_and_perform_cleanup() -> None:
     
     current_time = time.time()
     if current_time - last_cleanup_time > CLEANUP_INTERVAL_SECONDS:
-        clean_expired_cache()
-        last_cleanup_time = current_time
+        # Use non-blocking check to prevent bottlenecks
+        if cleanup_lock.acquire(blocking=False):
+            try:
+                # Double-check after acquiring lock
+                if time.time() - last_cleanup_time > CLEANUP_INTERVAL_SECONDS:
+                    removed = clean_expired_cache()
+                    last_cleanup_time = time.time()
+                    logger.info(f"Performed cache cleanup: {removed} items removed")
+            finally:
+                cleanup_lock.release()
 
 def clean_expired_cache() -> int:
     """
@@ -138,24 +213,41 @@ def clean_expired_cache() -> int:
         Number of expired items removed
     """
     current_time = datetime.now()
+    removed_count = 0
     
     # Clean callback cache
-    expired_callback_keys = [
-        key for key, item in callback_cache.items()
-        if current_time > item['expires_at']
-    ]
-    
-    for key in expired_callback_keys:
-        del callback_cache[key]
+    for key, item in callback_cache.items():
+        if current_time > item['expires_at']:
+            callback_cache.delete(key)
+            removed_count += 1
     
     # Clean video info cache
     video_expiry_time = current_time - timedelta(hours=VIDEO_CACHE_EXPIRY_HOURS)
-    video_expired_keys = [
-        key for key, info in video_info_cache.items()
-        if info.get('cached_at', datetime.min) < video_expiry_time
-    ]
+    for key, info in video_info_cache.items():
+        if info.get('cached_at', datetime.min) < video_expiry_time:
+            video_info_cache.delete(key)
+            removed_count += 1
     
-    for key in video_expired_keys:
-        del video_info_cache[key]
-    
-    return len(expired_callback_keys) + len(video_expired_keys)
+    return removed_count
+
+# Exception-safe decorator for cache operations
+def cache_operation_safe(default_return=None):
+    """Decorator to make cache operations exception-safe"""
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                logger.error(f"Cache operation error in {func.__name__}: {str(e)}")
+                return default_return
+        return wrapper
+    return decorator
+
+# Apply the decorator to public functions
+store_callback_data = cache_operation_safe("")(store_callback_data)
+get_callback_data = cache_operation_safe(None)(get_callback_data)
+add_video_info_to_cache = cache_operation_safe(None)(add_video_info_to_cache)
+get_video_info_from_cache = cache_operation_safe(None)(get_video_info_from_cache)
+clear_video_info_cache = cache_operation_safe(0)(clear_video_info_cache)
+clear_callback_cache = cache_operation_safe(0)(clear_callback_cache)
+clean_expired_cache = cache_operation_safe(0)(clean_expired_cache)

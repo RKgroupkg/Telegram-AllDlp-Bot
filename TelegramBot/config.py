@@ -66,6 +66,10 @@ YT_PROGRESS_UPDATE_INTERVAL : int = int(getenv("YT_PROGRESS_UPDATE_INTERVAL", "5
 YT_DOWNLOAD_PATH : str= getenv("YT_DOWNLOAD_PATH", "./tmp")
 MAX_VIDEO_LENGTH_MINUTES : int = int(getenv("MAX_VIDEO_LENGTH_MINUTES","15"))
 
+SPOTIFY_CLIENT_ID : str = getenv("SPOTIFY_CLIENT_ID", "")
+SPOTIFY_CLIENT_SECRET : str = getenv("SPOTIFY_CLIENT_SECRET", "")
+
+
 
 
 # Helper function to handle both direct env vars and .env format

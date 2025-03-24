@@ -135,7 +135,7 @@ async def instagram_downloader_handler(client: Client, message: Message) -> None
     
     # Send "processing" message to inform the user
     processing_msg = await message.reply_text(
-            f"📥 Processing Instagram link{'s' if len(instagram_urls) > 1 else ''}...",
+            f"≡ Processing Instagram link{'s' if len(instagram_urls) > 1 else ''}...",
             quote=True,
             disable_notification=True,
             reply_markup=InlineKeyboardMarkup(
@@ -159,9 +159,9 @@ async def instagram_downloader_handler(client: Client, message: Message) -> None
         # Prepare caption
         if message.chat.type == enums.ChatType.PRIVATE:
             # Case 1: Private chat
-            caption = f"📸 Instagram media\n\n"
+            caption = f"≡ Instagram media\n\n"
             if media_data.get("caption"):
-                caption += f"Caption: {media_data['caption'][:300]}"
+                caption += f"Caption: <i>{media_data['caption'][:300]}</i>"
                 if len(media_data['caption']) > 300:
                     caption += "..."
             caption += f"\n\nBy: {BOT_NAME}"
@@ -173,7 +173,7 @@ async def instagram_downloader_handler(client: Client, message: Message) -> None
             except Exception as e:
                 LOGGER(__name__).error(f"An error occurred while getting my chat_member error: {e}")
             
-            caption = f"📸 <i>Instagram media requested by:</i> {username}"
+            caption = f"≡ <i>Instagram media requested by:</i> {username}"
             
             # Add original msg if not just a link
             if not only_instagram_link:
@@ -187,13 +187,13 @@ async def instagram_downloader_handler(client: Client, message: Message) -> None
         medias = media_data.get("medias", [])
         
         if not medias:
-            await processing_msg.edit_text("❌ No media found in this Instagram post.")
+            await processing_msg.edit_text("✖ No media found in this Instagram post.")
             return
         
 
         insta_app_markup = InlineKeyboardMarkup(
                         [
-                            [InlineKeyboardButton("Open Instagram", url=instagram_url)]  # Take the first URL
+                            [InlineKeyboardButton("◉ Open Instagram", url=instagram_url)]  # Take the first URL
                         ]
                     )
         
@@ -278,7 +278,7 @@ async def instagram_downloader_handler(client: Client, message: Message) -> None
         
     except Exception as e:
         LOGGER(__name__).error(f"Error processing Instagram link: {e}")
-        await processing_msg.edit_text(f"❌ Error: {str(e)}")
+        await processing_msg.edit_text(f"✖ Error: {str(e)}")
 
 
 # Alternative command to manually trigger download for a specific Instagram link
@@ -291,7 +291,7 @@ async def instagram_command_handler(client: Client, message: Message) -> None:
     """
     if len(message.command) < 2:
         await message.reply_text(
-            "⚠️ Please provide an Instagram link.\n"
+            "⚠ Please provide an Instagram link.\n"
             "Usage: `/instagram [Instagram URL]`",
             quote=True
         )
@@ -302,7 +302,7 @@ async def instagram_command_handler(client: Client, message: Message) -> None:
     
     # Validate URL
     if not re.match(INSTAGRAM_URL_PATTERN, instagram_url):
-        await message.reply_text("❌ Invalid Instagram URL format.", quote=True)
+        await message.reply_text("✖ Invalid Instagram URL format.", quote=True)
         return
     
     # Send processing message
@@ -314,11 +314,11 @@ async def instagram_command_handler(client: Client, message: Message) -> None:
         media_data = await downloader.extract_media_url(instagram_url)
         
         if not media_data:
-            await processing_msg.edit_text("❌ Failed to extract media from Instagram link.")
+            await processing_msg.edit_text("✖ Failed to extract media from Instagram link.")
             return
         
         # Prepare caption
-        caption = f"📸 Instagram media\n\n"
+        caption = f"≡ Instagram media\n\n"
         if media_data.get("caption"):
             caption += f"Caption: {media_data['caption'][:300]}"
             if len(media_data['caption']) > 300:
@@ -328,7 +328,7 @@ async def instagram_command_handler(client: Client, message: Message) -> None:
         medias = media_data.get("medias", [])
         
         if not medias:
-            await processing_msg.edit_text("❌ No media found in this Instagram post.")
+            await processing_msg.edit_text("✖ No media found in this Instagram post.")
             return
             
         # Special handling for the first media
@@ -390,7 +390,7 @@ async def instagram_command_handler(client: Client, message: Message) -> None:
         
     except Exception as e:
         LOGGER(__name__).error(f"Error processing Instagram link: {e}")
-        await processing_msg.edit_text(f"❌ Error: {str(e)}")
+        await processing_msg.edit_text(f"✖ Error: {str(e)}")
 
 
 # Help command to show information about Instagram downloader feature
@@ -398,7 +398,7 @@ async def instagram_command_handler(client: Client, message: Message) -> None:
 async def instagram_help_handler(client: Client, message: Message) -> None:
     """Provide help information about the Instagram downloader feature."""
     help_text = (
-        "📸 **Instagram Downloader Help**\n\n"
+        "≡ **Instagram Downloader Help**\n\n"
         "This bot can extract and download media from Instagram links.\n\n"
         "**Automatic Detection:**\n"
         "Just send an Instagram post link, and I'll download it for you.\n\n"

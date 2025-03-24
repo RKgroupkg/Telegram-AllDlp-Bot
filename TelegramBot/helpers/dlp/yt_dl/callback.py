@@ -63,18 +63,18 @@ async def handle_youtube_link(client: Client, message: Message) -> None:
                 download_queue[user_id] = []
             
             markup = InlineKeyboardMarkup([
-                [InlineKeyboardButton("Cancel current download", callback_data=f"ytcancel_{user_id}")],
-                [InlineKeyboardButton("Add to queue", callback_data=f"ytqueue_{video_id}")]
+                [InlineKeyboardButton("✖ Cancel current download", callback_data=f"ytcancel_{user_id}")],
+                [InlineKeyboardButton("+ Add to queue", callback_data=f"ytqueue_{video_id}")]
             ])
             
             await message.reply_text(
-                "⚠️ You already have an active download in progress. You can cancel it or add this to your queue.",
+                "⚠ You already have an active download in progress. You can cancel it or add this to your queue.",
                 quote=True,
                 reply_markup=markup
             )
         return
     
-    processing_msg = await message.reply_text("🔍 Processing YouTube link...", quote=True)
+    processing_msg = await message.reply_text("⌕ Processing YouTube link...", quote=True)
     
     try:
         # Fetch video information with retries
@@ -100,14 +100,14 @@ async def handle_youtube_link(client: Client, message: Message) -> None:
                 info = None
         
         if not info:
-            await processing_msg.edit_text("❌ Failed to fetch video information. Please try again later.")
+            await processing_msg.edit_text("✖  Failed to fetch video information. Please try again later.")
             return
         
         # Check video duration
         duration_minutes = info['duration'] / 60
         if duration_minutes > MAX_VIDEO_LENGTH_MINUTES:
             await processing_msg.edit_text(
-                f"❌ Video is too long ({int(duration_minutes)} minutes). Maximum allowed duration is {MAX_VIDEO_LENGTH_MINUTES} minutes."
+                f"✖  Video is too long ({int(duration_minutes)} minutes). Maximum allowed duration is {MAX_VIDEO_LENGTH_MINUTES} minutes."
             )
             return
         
@@ -135,19 +135,17 @@ async def handle_youtube_link(client: Client, message: Message) -> None:
         
         # Update message with video information and format selection
         await processing_msg.edit_text(
-            f"📝 **{info['title']}**\n\n"
-            f"{thumbnail_markup}"
-            f"👤 Uploader: {info['uploader']}\n"
-            f"⏱️ Duration: {duration_str}\n"
-            f"👁️ Views: {info.get('view_count', 'N/A')}\n\n"
+            f"≡ __{info['title']}__\n\n"
+            f"𓇳 Uploader: __{info['uploader']}__\n"
+            f"🕑 Duration: __{duration_str}__\n"
+            f"👁️ Views: __{info.get('view_count', 'N/A')}__\n\n"
             f"Please select a format to download:",
-            reply_markup=markup,
-            disable_web_page_preview=False  # Allow thumbnail preview if available
+            reply_markup=markup
         )
     except Exception as e:
         error_trace = traceback.format_exc()
-        logger.error(f"Error processing YouTube link: {e}\n{error_trace}")
-        await processing_msg.edit_text(f"❌ Error processing YouTube link: {str(e)}")
+        logger.error(f"⚠ Error processing YouTube link: {e}\n{error_trace}")
+        await processing_msg.edit_text(f"✖  Error processing YouTube link: {str(e)}")
 
 async def handle_youtube_callback(client: Client, callback_query: CallbackQuery) -> None:
     """
@@ -177,7 +175,7 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
         logger.error(f"Callback data not found or expired: {callback_id}")
         await callback_query.answer("This selection has expired. Please try again.", show_alert=True)
         try:
-            await message.edit_text("⏰ This selection has expired. Please request the YouTube link again.")
+            await message.edit_text("🕑 This selection has expired. Please request the YouTube link again.")
         except MessageNotModified:
             pass
         return
@@ -186,9 +184,13 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
     try:
         if callback_type == "ytcancel":
             # If this user has an active download, mark it as cancelled
-            if user_id in active_downloads:
+            # Instead of directly using the callback_id as user_id
+            # We should extract the user_id from the cached data if available
+            user_id_to_cancel = int(callback_id) if callback_id.isdigit() else user_id
+            
+            if user_id_to_cancel in active_downloads:
                 active_downloads[user_id]['cancelled'] = True
-                await message.edit_text("❌ Download cancelled.")
+                await message.edit_text("✖  Download cancelled.")
                 
                 # Process next queued download if any
                 if user_id in download_queue and download_queue[user_id]:
@@ -207,23 +209,27 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
                     await callback_query.answer("Download cancelled.")
             else:
                 await callback_query.answer("No active download to cancel.")
-                await message.edit_text("❌ No active download to cancel.")
+                await message.edit_text("✖  No active download to cancel.")
             return
             
+        # Modify the first queue implementation to match the second
         elif callback_type == "ytqueue":
             video_id = callback_id
+            # Default format or get from user preference
+            default_format = "best"  # or some logic to determine default
+            
             if user_id not in download_queue:
                 download_queue[user_id] = []
             
-            download_queue[user_id].append(video_id)
+            download_queue[user_id].append((video_id, default_format))
             await callback_query.answer("Added to download queue!")
-            return
-            
+            return  
+          
         elif callback_type == "ytinfo":
             video_id = cached_data.get('video_id')
             info = get_video_info_from_cache(video_id)
             if not info:
-                await callback_query.answer("ℹ️ Video information not available anymore.", show_alert=True)
+                await callback_query.answer("𝘪 Video information not available anymore.", show_alert=True)
                 return
             
             duration_str = str(timedelta(seconds=info['duration']))
@@ -250,7 +256,7 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
             
             info = get_video_info_from_cache(video_id)
             if not info:
-                await callback_query.answer("ℹ️ Video information not available anymore.", show_alert=True)
+                await callback_query.answer("𝘪 Video information not available anymore.", show_alert=True)
                 return
             
             if filter_type == "all":
@@ -275,7 +281,7 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
             
             info = get_video_info_from_cache(video_id)
             if not info:
-                await callback_query.answer("ℹ️ Video information not available anymore.", show_alert=True)
+                await callback_query.answer("𝘪 Video information not available anymore.", show_alert=True)
                 return
             
             markup = create_format_selection_markup(info['formats'], page=page)
@@ -299,7 +305,7 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
                     [InlineKeyboardButton("Add to queue", callback_data=f"ytqueueformat_{queue_data}")]
                 ])
                 
-                await callback_query.answer("⚠️ You already have an active download in progress", show_alert=True)
+                await callback_query.answer("⚠ You already have an active download in progress", show_alert=True)
                 try:
                     await message.edit_reply_markup(reply_markup=queue_markup)
                 except MessageNotModified:
@@ -311,7 +317,7 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
             
             info = get_video_info_from_cache(video_id)
             if not info:
-                await callback_query.answer("ℹ️ Video information not available anymore.", show_alert=True)
+                await callback_query.answer("𝘪 Video information not available anymore.", show_alert=True)
                 return
             
             # Find selected format
@@ -322,20 +328,20 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
                     break
             
             if not selected_format:
-                await callback_query.answer("❌ Selected format not available.", show_alert=True)
+                await callback_query.answer("✖  Selected format not available.", show_alert=True)
                 return
             
             # For large files, ask for confirmation
             file_size = selected_format.get('filesize', selected_format.get('filesize_approx', 0))
             if file_size > 100 * 1024 * 1024:  # Over 100MB
                 confirm_markup = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("✅ Download anyway", callback_data=f"ytdlconfirm_{callback_id}")],
-                    [InlineKeyboardButton("❌ Cancel", callback_data=f"ytcancel_{user_id}")]
+                    [InlineKeyboardButton("✔ Download anyway", callback_data=f"ytdlconfirm_{callback_id}")],
+                    [InlineKeyboardButton("✖  Cancel", callback_data=f"ytcancel_{user_id}")]
                 ])
                 
                 size_mb = file_size / (1024 * 1024)
                 await message.edit_text(
-                    f"⚠️ Warning: This file is large ({size_mb:.1f}MB).\n\n"
+                    f"⚠ Warning: This file is large ({size_mb:.1f}MB).\n\n"
                     f"Title: {info['title']}\n"
                     f"Format: {selected_format.get('height', 'Audio')}p {selected_format.get('ext', '')}\n\n"
                     f"Do you want to proceed with the download?",
@@ -360,7 +366,7 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
             
             info = get_video_info_from_cache(video_id)
             if not info:
-                await callback_query.answer("ℹ️ Video information not available anymore.", show_alert=True)
+                await callback_query.answer("𝘪 Video information not available anymore.", show_alert=True)
                 return
             
             # Find selected format
@@ -371,7 +377,7 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
                     break
             
             if not selected_format:
-                await callback_query.answer("❌ Selected format not available.", show_alert=True)
+                await callback_query.answer("✖  Selected format not available.", show_alert=True)
                 return
                 
             # Proceed with download
@@ -394,7 +400,7 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
             queue_position = len(download_queue[user_id])
             await callback_query.answer(f"Added to download queue (position: {queue_position})")
             await message.edit_text(
-                f"✅ Added to download queue (position: {queue_position})\n\n"
+                f"✔ Added to download queue (position: {queue_position})\n\n"
                 f"Your download will start automatically when current download completes."
             )
             return
@@ -402,13 +408,13 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
     except Exception as e:
         error_trace = traceback.format_exc()
         logger.error(f"Error handling YouTube callback: {e}\n{error_trace}")
-        await callback_query.answer("❌ An error occurred while processing your request.", show_alert=True)
+        await callback_query.answer("✖  An error occurred while processing your request.", show_alert=True)
         try:
-            await message.edit_text(f"❌ An error occurred: {str(e)}")
+            await message.edit_text(f"✖  An error occurred: {str(e)}")
         except:
             pass
 
-async def start_download(client, callback_query, message, video_id, format_id, info, selected_format):
+async def start_download(client : Client, callback_query, message, video_id, format_id, info, selected_format):
     """Helper function to start a download with progress tracking"""
     user_id = callback_query.from_user.id
     
@@ -437,11 +443,11 @@ async def start_download(client, callback_query, message, video_id, format_id, i
     
     # Update message to show download status with cancel button
     cancel_markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("❌ Cancel Download", callback_data=f"ytcancel_{user_id}")]
+        [InlineKeyboardButton("✖  Cancel Download", callback_data=f"ytcancel_{user_id}")]
     ])
     
     await message.edit_text(
-        f"🔄 Preparing to download: **{info['title']}**\n\n"
+        f"⟳ Preparing to download: **{info['title']}**\n\n"
         f"Format: {format_info}\n"
         f"Status: Initializing...",
         reply_markup=cancel_markup
@@ -473,7 +479,7 @@ async def start_download(client, callback_query, message, video_id, format_id, i
                     active_downloads[user_id]['cancelled'] = True
                     try:
                         await message.edit_text(
-                            f"❌ Download stalled for too long. Cancelled automatically."
+                            f"✖  Download stalled for too long. Cancelled automatically."
                         )
                     except:
                         pass
@@ -507,7 +513,7 @@ async def start_download(client, callback_query, message, video_id, format_id, i
                     await message.edit_text(
                         f"{progress_text}\n"
                         f"Speed: {speed_text} | ETA: {eta_text}\n\n"
-                        f"🎬 **{info['title']}**",
+                        f"≡ __{info['title']}__",
                         reply_markup=cancel_markup
                     )
                 except (MessageNotModified, FloodWait) as e:
@@ -539,13 +545,13 @@ async def start_download(client, callback_query, message, video_id, format_id, i
                 # Otherwise retry
                 if attempt < MAX_RETRIES - 1:
                     await message.edit_text(
-                        f"⚠️ Download attempt {attempt+1} failed, retrying...\n\n"
+                        f"⚠ Download attempt {attempt+1} failed, retrying...\n\n"
                         f"Error: {result.get('error', 'Unknown error')}"
                     )
                     await asyncio.sleep(2)
             except Exception as e:
                 if attempt < MAX_RETRIES - 1:
-                    await message.edit_text(f"⚠️ Download error, retrying ({attempt+1}/{MAX_RETRIES})...")
+                    await message.edit_text(f"⚠ Download error, retrying ({attempt+1}/{MAX_RETRIES})...")
                     await asyncio.sleep(2)
                 else:
                     raise e
@@ -559,7 +565,7 @@ async def start_download(client, callback_query, message, video_id, format_id, i
         
         if not result['success']:
             await message.edit_text(
-                f"❌ Download failed after {MAX_RETRIES} attempts: {result.get('error', 'Unknown error')}"
+                f"✖  Download failed after {MAX_RETRIES} attempts: {result.get('error', 'Unknown error')}"
             )
             await process_next_in_queue(client, user_id, message)
             return
@@ -579,7 +585,7 @@ async def start_download(client, callback_query, message, video_id, format_id, i
                 await client.send_audio(
                     chat_id=message.chat.id,
                     audio=file_path,
-                    caption=f"🎵 **{title}**\n\n__Downloaded via__ @{(await client.get_me()).username}",
+                    caption=f"🎵 __{title}__\n\n__Downloaded via__ @{(await client.get_me()).username}",
                     file_name=f"{title}.{ext}",
                     reply_to_message_id=callback_query.message.reply_to_message.id if callback_query.message.reply_to_message else None
                 )
@@ -587,16 +593,15 @@ async def start_download(client, callback_query, message, video_id, format_id, i
                 await client.send_video(
                     chat_id=message.chat.id,
                     video=file_path,
-                    caption=f"🎬 **{title}**\n\n__Downloaded via__ @{(await client.get_me()).username}",
+                    caption=f"≡ **{title}**\n\n__Downloaded via__ @{(await client.get_me()).username}",
                     file_name=f"{title}.{ext}",
                     reply_to_message_id=callback_query.message.reply_to_message.id if callback_query.message.reply_to_message else None
                 )
             
-            await message.edit_text(f"✅ Successfully downloaded and uploaded: **{title}**")
         except Exception as e:
             error_trace = traceback.format_exc()
             logger.error(f"Failed to upload file: {e}\n{error_trace}")
-            await message.edit_text(f"❌ Failed to upload file: {str(e)}")
+            await message.edit_text(f"✖  Failed to upload file: {str(e)}")
         finally:
             # Clean up downloaded file and active download status
             try:
@@ -610,7 +615,7 @@ async def start_download(client, callback_query, message, video_id, format_id, i
     except Exception as e:
         error_trace = traceback.format_exc()
         logger.error(f"Error handling YouTube download: {e}\n{error_trace}")
-        await message.edit_text(f"❌ An error occurred during download: {str(e)}")
+        await message.edit_text(f"✖  An error occurred during download: {str(e)}")
         process_next_in_queue(client, user_id, message)
 
 def format_size(size_bytes):
@@ -655,7 +660,7 @@ async def process_next_in_queue(client, user_id, message):
             # Create a fake callback query to start the download
             info = get_video_info_from_cache(video_id)
             if not info:
-                await message.edit_text("❌ Queued video information expired. Please try again.")
+                await message.edit_text("✖  Queued video information expired. Please try again.")
                 await process_next_in_queue(client, user_id, message)
                 return
                 
@@ -667,7 +672,7 @@ async def process_next_in_queue(client, user_id, message):
                     break
                     
             if not selected_format:
-                await message.edit_text("❌ Queued format not available anymore.")
+                await message.edit_text("✖  Queued format not available anymore.")
                 await process_next_in_queue(client, user_id, message)
                 return
                 
@@ -681,12 +686,12 @@ async def process_next_in_queue(client, user_id, message):
                 data=f"ytdl_{video_id}:{format_id}"
             )
             
-            await message.edit_text(f"🔄 Starting next download from queue...")
+            await message.edit_text(f"⟳ Starting next download from queue...")
             await start_download(client, fake_callback, message, video_id, format_id, info, selected_format)
         else:
             # Just a video ID, need to show format selection
             video_id = next_item
-            await message.edit_text(f"🔄 Processing next video from queue...")
+            await message.edit_text(f"⟳ Processing next video from queue...")
             
             # Create a fake message to process the next download
             fake_message = Message(

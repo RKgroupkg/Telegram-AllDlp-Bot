@@ -19,7 +19,6 @@ from TelegramBot.config import(
     YT_PROGRESS_UPDATE_INTERVAL,
     YT_DOWNLOAD_PATH,
     MAX_VIDEO_LENGTH_MINUTES,
-    
 )
 
 # Ensure download directory exists
@@ -43,9 +42,9 @@ class CookieManager:
         self.cookies_dir = DEFAULT_COOKIES_DIR
         self.cookies_files = []
         self.cookie_usage_history = {}
+        self._lock = asyncio.Lock()
         self.refresh_cookies_list()
         self._initialized = True
-        self._lock = asyncio.Lock()
         
     def refresh_cookies_list(self):
         """Refresh the list of available cookie files"""
@@ -53,13 +52,16 @@ class CookieManager:
         if os.path.isdir(self.cookies_dir):
             for file in os.listdir(self.cookies_dir):
                 if file.endswith('.txt'):
-                    self.cookies_files.append(os.path.join(self.cookies_dir, file))
+                    cookie_path = os.path.join(self.cookies_dir, file)
+                    # Verify the file is readable and not empty
+                    if os.path.getsize(cookie_path) > 0:
+                        self.cookies_files.append(cookie_path)
         
-        # Add the root cookies.txt if it exists
-        if os.path.exists('cookies.txt'):
+        # Add the root cookies.txt if it exists and is not empty
+        if os.path.exists('cookies.txt') and os.path.getsize('cookies.txt') > 0:
             self.cookies_files.append('cookies.txt')
             
-        logger.info(f"Found {len(self.cookies_files)} cookie files")
+        logger.info(f"Found {len(self.cookies_files)} valid cookie files")
     
     async def get_cookie_file(self) -> Optional[str]:
         """Get the next cookie file to use based on rotation policy"""
@@ -68,7 +70,11 @@ class CookieManager:
             
             # If no cookies available, return None
             if not self.cookies_files:
-                return None
+                # Try refreshing once more in case new cookies were added
+                self.refresh_cookies_list()
+                if not self.cookies_files:
+                    logger.warning("No cookie files available")
+                    return None
                 
             # Filter cookies that aren't in cooldown
             available_cookies = [
@@ -79,13 +85,16 @@ class CookieManager:
             # If all cookies are in cooldown, use the least recently used one
             if not available_cookies:
                 cookie = min(self.cookies_files, key=lambda x: self.cookie_usage_history.get(x, 0))
+                logger.debug(f"All cookies in cooldown, using least recently used: {os.path.basename(cookie)}")
             else:
                 cookie = random.choice(available_cookies)
                 
             # Update usage history
             self.cookie_usage_history[cookie] = now
+            logger.debug(f"Using cookie file: {os.path.basename(cookie)}")
             return cookie
 
+# Singleton instance
 cookie_manager = CookieManager()
 
 # Thread-local storage for event loops
@@ -116,7 +125,7 @@ class DownloadTracker:
         status = progress.get('status', '')
         
         # Update our data
-        self.progress_data.update(progress)  # Use update() instead of assignment to preserve the status field
+        self.progress_data.update(progress)
         
         # Always update on 'finished' or 'error' status
         if status in ('finished', 'error'):
@@ -178,6 +187,170 @@ class DownloadPool:
 
 download_pool = DownloadPool()
 
+async def search_youtube(
+    query: str, 
+    max_results: int = 1,  # Changed to 1 to return top result only
+    include_playlists: bool = False,
+    search_region: str = None,
+    language: str = None,
+    timeout: int = 15,
+    use_cookie: bool = True
+) -> List[Dict[str, Any]]:
+    """
+    Search YouTube for videos matching a query and return the top result with info
+    
+    Args:
+        query: Search query string
+        max_results: Maximum number of results to return (default: 1 for top result)
+        include_playlists: Whether to include playlists in results
+        search_region: Region code to use for search (e.g., 'US', 'GB')
+        language: Language preference (e.g., 'en', 'es')
+        timeout: Socket timeout in seconds
+        use_cookie: Whether to use cookie rotation system
+        
+    Returns:
+        List of video information dictionaries, with top result containing detailed info
+    """
+    # Get a cookie file if requested
+    cookie_file = await cookie_manager.get_cookie_file() if use_cookie else None
+    
+    # Common user agent to avoid 403 errors
+    user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    
+    ydl_opts = {
+        'format': 'best',
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': 'in_playlist',  # Changed to get more info while keeping playlist structure
+        'default_search': 'ytsearch',
+        'noplaylist': not include_playlists,
+        'socket_timeout': timeout,
+        'ignoreerrors': True,
+        'skip_download': True,
+        'writeinfojson': False,
+        'playlist_items': f'1-{max_results}',
+        'user_agent': user_agent,
+    }
+    
+    # Add optional parameters if provided
+    if search_region:
+        ydl_opts['geo_bypass_country'] = search_region
+    
+    if language:
+        ydl_opts['extractor_args'] = {'youtube': {'lang': [language]}}
+    
+    # Add cookie file if available
+    if cookie_file:
+        ydl_opts['cookiefile'] = cookie_file
+    
+    try:
+        def search_fn():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                # Prefix query with search prefix and limit
+                search_query = f"ytsearch{max_results}:{query}"
+                return ydl.extract_info(search_query, download=False)
+        
+        # Run search in thread pool with timeout protection
+        try:
+            search_results = await asyncio.wait_for(
+                download_pool.run_download(search_fn),
+                timeout=timeout + 5  # Add 5 seconds buffer to the socket timeout
+            )
+        except asyncio.TimeoutError:
+            logger.warning(f"Search timed out for query: {query}")
+            return []
+        
+        if not search_results or 'entries' not in search_results:
+            logger.warning(f"No results found for query: {query}")
+            return []
+            
+        # Process and return search results
+        results = []
+        for entry in search_results.get('entries', []):
+            if not entry:
+                continue
+                
+            # Handle playlist entries
+            if entry.get('_type') == 'playlist' and include_playlists:
+                result = {
+                    'id': entry.get('id'),
+                    'title': entry.get('title', 'Unknown Playlist'),
+                    'url': entry.get('url', f"https://www.youtube.com/playlist?list={entry.get('id')}"),
+                    'thumbnail': entry.get('thumbnail', None),
+                    'type': 'playlist',
+                    'entries_count': entry.get('entries_count', 0),
+                    'uploader': entry.get('uploader', 'Unknown'),
+                }
+                results.append(result)
+            else:
+                # Extract relevant information for videos
+                result = {
+                    'id': entry.get('id'),
+                    'title': entry.get('title', 'Unknown Title'),
+                    'url': entry.get('url', f"https://www.youtube.com/watch?v={entry.get('id')}"),
+                    'thumbnail': entry.get('thumbnail', None),
+                    'duration': entry.get('duration', 0),
+                    'duration_string': format_duration(entry.get('duration', 0)),
+                    'uploader': entry.get('uploader', 'Unknown'),
+                    'uploader_id': entry.get('uploader_id', 'Unknown'),
+                    'description': entry.get('description', ''),
+                    'view_count': entry.get('view_count', 0),
+                    'upload_date': format_upload_date(entry.get('upload_date', '')),
+                    'type': 'video',
+                    'live_status': entry.get('live_status', None)
+                }
+                
+                # Check for videos that exceed maximum length
+                if MAX_VIDEO_LENGTH_MINUTES > 0 and entry.get('duration', 0) > MAX_VIDEO_LENGTH_MINUTES * 60:
+                    result['exceeds_max_length'] = True
+                
+                # If this is the top result, get additional info like fetch_youtube_info would
+                if max_results == 1:
+                    try:
+                        additional_info = await fetch_youtube_info(entry.get('id'))
+                        if additional_info:
+                            # Merge additional format info
+                            result['formats'] = additional_info.get('formats', [])
+                            result['all_formats'] = additional_info.get('all_formats', [])
+                            result['video_formats'] = additional_info.get('video_formats', [])
+                            result['audio_formats'] = additional_info.get('audio_formats', [])
+                            result['combined_formats'] = additional_info.get('combined_formats', [])
+                    except Exception as e:
+                        logger.warning(f"Could not fetch additional info for top result: {str(e)}")
+                
+                results.append(result)
+        
+        return results
+    except Exception as e:
+        logger.error(f"Error searching YouTube: {str(e)}", exc_info=True)
+        return []
+
+def format_duration(seconds: int) -> str:
+    """Format duration in seconds to a readable string"""
+    if not seconds:
+        return "Unknown"
+        
+    minutes, seconds = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    
+    if hours:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+    else:
+        return f"{minutes}:{int(seconds):02d}"
+
+def format_upload_date(date_str: str) -> str:
+    """Format upload date from YYYYMMDD to a readable format"""
+    if not date_str or len(date_str) != 8:
+        return date_str
+        
+    try:
+        year = date_str[:4]
+        month = date_str[4:6]
+        day = date_str[6:8]
+        return f"{year}-{month}-{day}"
+    except:
+        return date_str
+        
 async def fetch_youtube_info(video_id: str) -> Optional[Dict[str, Any]]:
     """
     Fetch information about a YouTube video
@@ -191,80 +364,108 @@ async def fetch_youtube_info(video_id: str) -> Optional[Dict[str, Any]]:
     # Get a cookie file
     cookie_file = await cookie_manager.get_cookie_file()
     
+    # Common user agent to avoid 403 errors
+    user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    
     ydl_opts = {
         'format': 'best',
         'quiet': True,
         'no_warnings': True,
         'noplaylist': True,
         'socket_timeout': 30,
-        'extract_flat': 'in_playlist',
+        'extract_flat': False,  # Changed to get full info
         'ignoreerrors': True,
+        'user_agent': user_agent,
     }
     
     # Add cookie file if available
     if cookie_file:
         ydl_opts['cookiefile'] = cookie_file
     
-    try:
-        def extract_info():
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
-        
-        # Run extraction in thread pool
-        info = await download_pool.run_download(extract_info)
-        
-        if not info:
-            logger.warning(f"Failed to fetch info for video {video_id}")
-            return None
+    # Implement retries
+    max_retries = 3
+    retry_count = 0
+    
+    while retry_count < max_retries:
+        try:
+            def extract_info():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    return ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
             
-        # Filter and sort formats
-        formats = []
-        
-        # Add combined formats first (with both video and audio)
-        combined_formats = [f for f in info['formats'] if f.get('acodec') != 'none' and f.get('vcodec') != 'none']
-        # Sort by quality (height) in descending order
-        combined_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
-        # Add video_id to each format for reference
-        for fmt in combined_formats:
-            fmt['video_id'] = video_id
-        formats.extend(combined_formats)
-        
-        # Add video-only formats
-        video_formats = [f for f in info['formats'] if f.get('acodec') == 'none' and f.get('vcodec') != 'none']
-        video_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
-        # Add video_id to each format for reference
-        for fmt in video_formats:
-            fmt['video_id'] = video_id
-        formats.extend(video_formats)
-        
-        # Add audio-only formats
-        audio_formats = [f for f in info['formats'] if f.get('acodec') != 'none' and f.get('vcodec') == 'none']
-        audio_formats.sort(key=lambda x: (x.get('asr', 0) or 0), reverse=True)
-        # Add video_id to each format for reference
-        for fmt in audio_formats:
-            fmt['video_id'] = video_id
-        formats.extend(audio_formats)
-        
-        # Save relevant info
-        result = {
-            'title': info.get('title', 'Unknown Title'),
-            'duration': info.get('duration', 0),
-            'thumbnail': info.get('thumbnail', None),
-            'uploader': info.get('uploader', 'Unknown'),
-            'view_count': info.get('view_count', 0),
-            'upload_date': info.get('upload_date', ''),
-            'description': info.get('description', ''),
-            'formats': formats,
-            'all_formats': formats,
-            'video_formats': video_formats,
-            'audio_formats': audio_formats,
-            'combined_formats': combined_formats
-        }
-        
-        return result
-    except Exception as e:
-        logger.error(f"Error fetching YouTube info for {video_id}: {str(e)}")
-        return None
+            # Run extraction in thread pool
+            info = await download_pool.run_download(extract_info)
+            
+            if not info:
+                retry_count += 1
+                logger.warning(f"Failed to fetch info for video {video_id} (attempt {retry_count}/{max_retries})")
+                if retry_count < max_retries:
+                    # Get a different cookie file for the next attempt
+                    cookie_file = await cookie_manager.get_cookie_file()
+                    ydl_opts['cookiefile'] = cookie_file
+                    await asyncio.sleep(1)  # Short delay before retry
+                    continue
+                return None
+            
+            # Successfully got info, break out of retry loop
+            break
+            
+        except Exception as e:
+            retry_count += 1
+            logger.warning(f"Error fetching YouTube info for {video_id} (attempt {retry_count}/{max_retries}): {str(e)}")
+            if retry_count < max_retries:
+                # Get a different cookie file for the next attempt
+                cookie_file = await cookie_manager.get_cookie_file()
+                ydl_opts['cookiefile'] = cookie_file
+                await asyncio.sleep(1)  # Short delay before retry
+                continue
+            logger.error(f"All attempts to fetch info for {video_id} failed: {str(e)}")
+            return None
+    
+    # Filter and sort formats
+    formats = []
+    
+    # Add combined formats first (with both video and audio)
+    combined_formats = [f for f in info['formats'] if f.get('acodec') != 'none' and f.get('vcodec') != 'none']
+    # Sort by quality (height) in descending order
+    combined_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
+    # Add video_id to each format for reference
+    for fmt in combined_formats:
+        fmt['video_id'] = video_id
+    formats.extend(combined_formats)
+    
+    # Add video-only formats
+    video_formats = [f for f in info['formats'] if f.get('acodec') == 'none' and f.get('vcodec') != 'none']
+    video_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
+    # Add video_id to each format for reference
+    for fmt in video_formats:
+        fmt['video_id'] = video_id
+    formats.extend(video_formats)
+    
+    # Add audio-only formats
+    audio_formats = [f for f in info['formats'] if f.get('acodec') != 'none' and f.get('vcodec') == 'none']
+    audio_formats.sort(key=lambda x: (x.get('asr', 0) or 0), reverse=True)
+    # Add video_id to each format for reference
+    for fmt in audio_formats:
+        fmt['video_id'] = video_id
+    formats.extend(audio_formats)
+    
+    # Save relevant info
+    result = {
+        'title': info.get('title', 'Unknown Title'),
+        'duration': info.get('duration', 0),
+        'thumbnail': info.get('thumbnail', None),
+        'uploader': info.get('uploader', 'Unknown'),
+        'view_count': info.get('view_count', 0),
+        'upload_date': format_upload_date(info.get('upload_date', '')),
+        'description': info.get('description', ''),
+        'formats': formats,
+        'all_formats': formats,
+        'video_formats': video_formats,
+        'audio_formats': audio_formats,
+        'combined_formats': combined_formats
+    }
+    
+    return result
 
 async def format_progress(current: int, total: int, start_time: float) -> str:
     """
@@ -286,7 +487,7 @@ async def format_progress(current: int, total: int, start_time: float) -> str:
     completed_length = int(progress_bar_length * current / total) if total > 0 else 0
     remaining_length = progress_bar_length - completed_length
     
-    progress_bar = '█' * completed_length + '░' * remaining_length
+    progress_bar = '▰' * completed_length + '▱' * remaining_length
     
     # Calculate ETA
     if speed > 0:
@@ -328,6 +529,9 @@ async def download_youtube_video(
     # Create output filename with temp suffix during download
     output_template = f'{YT_DOWNLOAD_PATH}/%(id)s.%(ext)s'
     
+    # Common user agent to avoid 403 errors
+    user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    
     ydl_opts = {
         'format': format_id,
         'quiet': True,
@@ -338,6 +542,7 @@ async def download_youtube_video(
         'retries': 5,
         'fragment_retries': 5,
         'ignoreerrors': False,
+        'user_agent': user_agent,
     }
     
     # Add cookie file if available
@@ -382,75 +587,126 @@ async def download_youtube_video(
     # Start the progress processing task
     progress_task = asyncio.create_task(process_progress_updates())
     
-    try:
-        def download_fn():
+    # Implement retries
+    max_retries = 3
+    retry_count = 0
+    
+    while retry_count < max_retries:
+        try:
+            def download_fn():
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        return ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=True)
+                except Exception as e:
+                    logger.error(f"Error in download thread: {str(e)}")
+                    return {'error': str(e)}
+            
+            # Run download in thread pool
+            info = await download_pool.run_download(download_fn)
+            
+            if not info or 'error' in info:
+                error_msg = info.get('error', 'Failed to download video') if info else 'Failed to download video'
+                retry_count += 1
+                logger.warning(f"Download failed for video {video_id} (attempt {retry_count}/{max_retries}): {error_msg}")
+                
+                if retry_count < max_retries:
+                    # Send progress update about retry
+                    retry_update = {
+                        'status': 'retry',
+                        'retry_count': retry_count,
+                        'max_retries': max_retries,
+                        'error': error_msg
+                    }
+                    await progress_queue.put(retry_update)
+                    
+                    # Get a different cookie file for next attempt
+                    cookie_file = await cookie_manager.get_cookie_file()
+                    ydl_opts['cookiefile'] = cookie_file
+                    await asyncio.sleep(2)  # Delay before retry
+                    continue
+                
+                # All retries failed
+                stop_event.set()
+                await progress_task
+                
+                return {
+                    'success': False,
+                    'error': error_msg
+                }
+            
+            # Successfully downloaded, break out of retry loop
+            break
+            
+        except Exception as e:
+            retry_count += 1
+            logger.warning(f"Error downloading YouTube video {video_id} (attempt {retry_count}/{max_retries}): {str(e)}")
+            
+            if retry_count < max_retries:
+                # Send progress update about retry
+                retry_update = {
+                    'status': 'retry',
+                    'retry_count': retry_count,
+                    'max_retries': max_retries,
+                    'error': str(e)
+                }
+                await progress_queue.put(retry_update)
+                
+                # Get a different cookie file for next attempt
+                cookie_file = await cookie_manager.get_cookie_file()
+                ydl_opts['cookiefile'] = cookie_file
+                await asyncio.sleep(2)  # Delay before retry
+                continue
+            
+            # All retries failed
+            stop_event.set()
             try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    return ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=True)
-            except Exception as e:
-                logger.error(f"Error in download thread: {str(e)}")
-                return {'error': str(e)}
-        
-        # Run download in thread pool
-        info = await download_pool.run_download(download_fn)
-        
-        # Stop the progress processing
-        stop_event.set()
-        await progress_task
-        
-        if not info or 'error' in info:
-            error_msg = info.get('error', 'Failed to download video') if info else 'Failed to download video'
+                await progress_task
+            except:
+                pass
+            
             return {
                 'success': False,
-                'error': error_msg
+                'error': str(e)
             }
+    
+    # Stop the progress processing
+    stop_event.set()
+    await progress_task
+    
+    # Determine actual file path
+    if 'requested_downloads' in info and info['requested_downloads']:
+        file_path = info['requested_downloads'][0]['filepath']
+    else:
+        # Fallback file path construction
+        ext = info.get('ext', None)
+        if not ext and 'formats' in info:
+            # Try to get extension from format
+            for fmt in info['formats']:
+                if fmt.get('format_id') == format_id:
+                    ext = fmt.get('ext')
+                    break
         
-        # Determine actual file path
-        if 'requested_downloads' in info and info['requested_downloads']:
-            file_path = info['requested_downloads'][0]['filepath']
-        else:
-            file_path = os.path.join(YT_DOWNLOAD_PATH, f"{video_id}.{info['ext']}")
-        
+        if not ext:
+            # Last resort default
+            ext = 'mp4'
+            
+        file_path = os.path.join(YT_DOWNLOAD_PATH, f"{video_id}.{ext}")
+    
+    if os.path.exists(file_path):
         return {
             'success': True,
             'file_path': file_path,
             'title': info.get('title', 'Unknown Title'),
             'ext': info.get('ext', 'unknown'),
-            'filesize': os.path.getsize(file_path) if os.path.exists(file_path) else 0,
+            'filesize': os.path.getsize(file_path),
             'duration': info.get('duration', 0)
         }
-    except Exception as e:
-        logger.error(f"Error downloading YouTube video {video_id}: {str(e)}")
-        # Stop the progress processing
-        stop_event.set()
-        try:
-            await progress_task
-        except:
-            pass
-            
-        # Send one final error update with a guaranteed status field
-        final_update = {
-            'status': 'error',
-            'error': str(e),
-            'video_id': video_id
-        }
-        # Update progress data instead of replacing it
-        tracker.progress_data.update(final_update)
-        await tracker.force_update()
-        
+    else:
         return {
             'success': False,
-            'error': str(e)
+            'error': "Download completed but file not found at expected location"
         }
-    finally:
-        # Ensure progress task is completed
-        stop_event.set()
-        try:
-            if not progress_task.done():
-                await progress_task
-        except:
-            pass
-
+    
 def is_valid_youtube_id(video_id: str) -> bool:
     """
     Check if the provided string is a valid YouTube video ID
