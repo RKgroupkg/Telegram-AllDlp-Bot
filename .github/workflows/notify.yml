@@ -17,17 +17,18 @@ on:
 # Reduce permissions to only what's necessary
 permissions:
   contents: read
+  actions: read
 
 jobs:
   telegram-notification:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: ==[ Checkout Repository ]==
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Prepare Commit Message
+      - name: ==[ Prepare Commit Information ]==
         id: commit-info
         env:
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
@@ -35,52 +36,72 @@ jobs:
           AUTHOR_NAME: ${{ github.event.head_commit.author.name }}
         shell: bash
         run: |
-          # Truncate and escape commit message
+          # Fetch detailed commit information
           TRUNCATED_MESSAGE=$(echo "$COMMIT_MESSAGE" | head -n 1 | cut -c1-200)
           ESCAPED_MESSAGE=$(printf '%s' "$TRUNCATED_MESSAGE" | jq -R -s '.')
+          
+          # Get line changes and file modifications
+          LINES_ADDED=$(git diff --shortstat HEAD^..HEAD | awk '{print $4}')
+          LINES_DELETED=$(git diff --shortstat HEAD^..HEAD | awk '{print $6}')
+          FILES_CHANGED=$(git diff --name-only HEAD^..HEAD | wc -l)
           
           # Prepare output variables
           echo "short_hash=${COMMIT_HASH:0:7}" >> $GITHUB_OUTPUT
           echo "truncated_message=$ESCAPED_MESSAGE" >> $GITHUB_OUTPUT
           echo "author=$AUTHOR_NAME" >> $GITHUB_OUTPUT
+          echo "lines_added=$LINES_ADDED" >> $GITHUB_OUTPUT
+          echo "lines_deleted=$LINES_DELETED" >> $GITHUB_OUTPUT
+          echo "files_changed=$FILES_CHANGED" >> $GITHUB_OUTPUT
 
-      - name: Send Telegram Notification
+      - name: ==[ Send Telegram Notification ]==
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.CHAT_ID }}
           token: ${{ secrets.BOT_TOKEN }}
           message: |
-            🚀 *New Commit Notification* 🚀
-
-            *Repository:* `${{ github.repository }}`
-            *Branch:* `${{ github.ref_name }}`
-
-            *Commit Details:*
-            • Hash: `${{ steps.commit-info.outputs.short_hash }}`
-            • Author: ${{ steps.commit-info.outputs.author }}
-
-            *Commit Message:*
+            .-[ COMMIT NOTIFICATION ]---------------------.
+            |  *Repository:* `${{ github.repository }}`    |
+            |  *Branch:*     `${{ github.ref_name }}`      |
+            '-------------------------------------------'
+            
+            .:*{ COMMIT DETAILS }*:. 
+            | Hash       : `${{ steps.commit-info.outputs.short_hash }}`
+            | Author     : ${{ steps.commit-info.outputs.author }}
+            | Timestamp  : ${{ github.event.head_commit.timestamp }}
+            
+            .:*{ CHANGE STATISTICS }*:.
+            | Lines Added   : +${{ steps.commit-info.outputs.lines_added }}
+            | Lines Deleted : -${{ steps.commit-info.outputs.lines_deleted }}
+            | Files Changed : ${{ steps.commit-info.outputs.files_changed }}
+            
+            .:*{ COMMIT MESSAGE }*:.
             ```
             ${{ steps.commit-info.outputs.truncated_message }}
             ```
+            
+            [/] Quick Actions:
+            * <button>View Commit</button> 
+            * <button>Compare Changes</button>
 
-            *View Commit:* [GitHub Link](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
+            .-[ END OF NOTIFICATION ]--------------------.
           format: markdown
           disable_web_page_preview: true
 
-      - name: Notify on Failure
+      - name: ==[ Notify on Workflow Failure ]==
         if: failure()
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           message: |
-            ❌ *Workflow Failure Alert* ❌
-
+            !!![ WORKFLOW FAILURE ALERT ]!!!
+            
             *Repository:* `${{ github.repository }}`
-            *Workflow:* `${{ github.workflow }}`
-            *Branch:* `${{ github.ref_name }}`
-
-            *Failure Details:*
-            Workflow notification job encountered an error.
+            *Workflow:*   `${{ github.workflow }}`
+            *Branch:*     `${{ github.ref_name }}`
+            
+            .:*{ ERROR DETAILS }*:.
+            Workflow notification job encountered a critical error.
+            
+            !!![ ATTENTION REQUIRED ]!!!
           format: markdown
