@@ -14,94 +14,90 @@ on:
       - synchronize
       - reopened
 
-# Reduce permissions to only what's necessary
+# Minimal required permissions
 permissions:
   contents: read
-  actions: read
 
 jobs:
   telegram-notification:
     runs-on: ubuntu-latest
     steps:
-      - name: ==[ Checkout Repository ]==
+      - name: ├─ Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: ==[ Prepare Commit Information ]==
-        id: commit-info
+      - name: ├─ Analyze Commit Details
+        id: commit-analysis
         env:
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           COMMIT_HASH: ${{ github.sha }}
           AUTHOR_NAME: ${{ github.event.head_commit.author.name }}
         shell: bash
         run: |
-          # Fetch detailed commit information
+          # Retrieve git diff statistics
+          LINES_CHANGED=$(git diff --shortstat HEAD^..HEAD | awk '{print $4 + $6}')
+          FILES_MODIFIED=$(git diff --name-only HEAD^..HEAD | wc -l)
+          
+          # Truncate and escape commit message
           TRUNCATED_MESSAGE=$(echo "$COMMIT_MESSAGE" | head -n 1 | cut -c1-200)
           ESCAPED_MESSAGE=$(printf '%s' "$TRUNCATED_MESSAGE" | jq -R -s '.')
-          
-          # Get line changes and file modifications
-          LINES_ADDED=$(git diff --shortstat HEAD^..HEAD | awk '{print $4}')
-          LINES_DELETED=$(git diff --shortstat HEAD^..HEAD | awk '{print $6}')
-          FILES_CHANGED=$(git diff --name-only HEAD^..HEAD | wc -l)
           
           # Prepare output variables
           echo "short_hash=${COMMIT_HASH:0:7}" >> $GITHUB_OUTPUT
           echo "truncated_message=$ESCAPED_MESSAGE" >> $GITHUB_OUTPUT
           echo "author=$AUTHOR_NAME" >> $GITHUB_OUTPUT
-          echo "lines_added=$LINES_ADDED" >> $GITHUB_OUTPUT
-          echo "lines_deleted=$LINES_DELETED" >> $GITHUB_OUTPUT
-          echo "files_changed=$FILES_CHANGED" >> $GITHUB_OUTPUT
+          echo "lines_changed=$LINES_CHANGED" >> $GITHUB_OUTPUT
+          echo "files_modified=$FILES_MODIFIED" >> $GITHUB_OUTPUT
 
-      - name: ==[ Send Telegram Notification ]==
+      - name: └─ Send Detailed Telegram Notification
         uses: appleboy/telegram-action@master
         with:
-          to: ${{ secrets.CHAT_ID }}
-          token: ${{ secrets.BOT_TOKEN }}
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           message: |
-            .-[ COMMIT NOTIFICATION ]---------------------.
-            |  *Repository:* `${{ github.repository }}`    |
-            |  *Branch:*     `${{ github.ref_name }}`      |
-            '-------------------------------------------'
-            
-            .:*{ COMMIT DETAILS }*:. 
-            | Hash       : `${{ steps.commit-info.outputs.short_hash }}`
-            | Author     : ${{ steps.commit-info.outputs.author }}
-            | Timestamp  : ${{ github.event.head_commit.timestamp }}
-            
-            .:*{ CHANGE STATISTICS }*:.
-            | Lines Added   : +${{ steps.commit-info.outputs.lines_added }}
-            | Lines Deleted : -${{ steps.commit-info.outputs.lines_deleted }}
-            | Files Changed : ${{ steps.commit-info.outputs.files_changed }}
-            
-            .:*{ COMMIT MESSAGE }*:.
-            ```
-            ${{ steps.commit-info.outputs.truncated_message }}
-            ```
-            
-            [/] Quick Actions:
-            * <button>View Commit</button> 
-            * <button>Compare Changes</button>
+            ◈ Commit Notification ◈
 
-            .-[ END OF NOTIFICATION ]--------------------.
+            *Repository:* `${{ github.repository }}`
+            *Branch:*    `${{ github.ref_name }}`
+
+            ╭─ Commit Metadata
+            │ • Hash:   `${{ steps.commit-analysis.outputs.short_hash }}`
+            │ • Author: ${{ steps.commit-analysis.outputs.author }}
+            ╰─────────────────────────────
+
+            ╭─ Commit Scope
+            │ • Files Changed: ${{ steps.commit-analysis.outputs.files_modified }}
+            │ • Lines Modified: ${{ steps.commit-analysis.outputs.lines_changed }}
+            ╰─────────────────────────────
+
+            *Commit Message:*
+            ```
+            ${{ steps.commit-analysis.outputs.truncated_message }}
+            ```
+
+            ┌─ Quick Actions ─┐
+            │ [📋 View Commit](
+            ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
+            └─────────────────┘
           format: markdown
           disable_web_page_preview: true
 
-      - name: ==[ Notify on Workflow Failure ]==
+      - name: └─ Failure Notification
         if: failure()
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           message: |
-            !!![ WORKFLOW FAILURE ALERT ]!!!
-            
+            ◈ Workflow Failure Alert ◈
+
             *Repository:* `${{ github.repository }}`
             *Workflow:*   `${{ github.workflow }}`
             *Branch:*     `${{ github.ref_name }}`
-            
-            .:*{ ERROR DETAILS }*:.
-            Workflow notification job encountered a critical error.
-            
-            !!![ ATTENTION REQUIRED ]!!!
+
+            ╭─ Error Details
+            │ • Status: Workflow Notification Failed
+            │ • Timestamp: $(date +'%Y-%m-%d %H:%M:%S')
+            ╰─────────────────────────────
           format: markdown
