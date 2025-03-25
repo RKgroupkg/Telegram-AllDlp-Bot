@@ -1,22 +1,21 @@
 import re
 import os
 from time import time
-import asyncio
 from typing import Dict, Any, Optional, Tuple
 
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from pyrogram import filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import Message
 
 from TelegramBot import bot
-from TelegramBot.helpers.filters import is_ratelimited
+from TelegramBot.helpers.filters import is_ratelimiter_dl
 from TelegramBot.helpers.dlp.yt_dl.ytdl_core import search_youtube, fetch_youtube_info
-from TelegramBot.helpers.dlp.yt_dl.utils import generate_format_buttons, create_format_selection_markup
+from TelegramBot.helpers.dlp.yt_dl.utils import create_format_selection_markup
 from TelegramBot.config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
 
 
-from TelegramBot.helpers.dlp.yt_dl.chach import (
+from TelegramBot.helpers.dlp.yt_dl.catch import (
     get_callback_data, get_video_info_from_cache, add_video_info_to_cache,
     clear_video_info_cache, clean_expired_cache
 )
@@ -130,7 +129,7 @@ async def find_youtube_match(track_info: Dict[str, Any]) -> Optional[Tuple[Dict[
     return video_info, video_id
 
 
-@bot.on_message(filters.regex(SPOTIFY_TRACK_REGEX) & is_ratelimited)
+@bot.on_message(filters.regex(SPOTIFY_TRACK_REGEX)|filters.command(["spt","spotify","sptdlp","dlmusic"]) & is_ratelimiter_dl)
 async def spotify_track_handler(_, message: Message):
     """Handle Spotify track links and convert to YouTube download options"""
     
@@ -204,12 +203,12 @@ async def spotify_track_handler(_, message: Message):
             
             # Create rich info message with minimal design
             info_text = (
-                f"<b>{track_info['title']}</b>\n\n"
-                f"♪ <b>Artist:</b> {track_info['artist']}\n"
-                f"◉ <b>Album:</b> {track_info['album']}\n"
-                f"◈ <b>Released:</b> {track_info['release_date']}\n"
-                f"◷ <b>Length:</b> {track_info['duration_formatted']}\n"
-                f"✧ <b>Popularity:</b> {track_info['popularity']}/100\n\n"
+                f"<i>{track_info['title']}</i>\n\n"
+                f"♪ <b>Artist:</b> <i>{track_info['artist']}</i>\n"
+                f"◉ <b>Album:</b> <i>{track_info['album']}</i>\n"
+                f"◈ <b>Released:</b> <i>{track_info['release_date']}</i>\n"
+                f"◷ <b>Length:</b> <i>{track_info['duration_formatted']}</i>\n"
+                f"✧ <b>Popularity:</b> <i>{track_info['popularity']}/100</i>\n\n"
                 f"<i>Select format to download:</i>"
             )
             
@@ -224,11 +223,11 @@ async def spotify_track_handler(_, message: Message):
             # Create minimal info message without photo
             info_text = (
                 f"<b>{track_info['title']}</b>\n\n"
-                f"♪ <b>Artist:</b> {track_info['artist']}\n"
-                f"◉ <b>Album:</b> {track_info['album']}\n"
-                f"◈ <b>Released:</b> {track_info['release_date']}\n"
-                f"◷ <b>Length:</b> {track_info['duration_formatted']}\n"
-                f"✧ <b>Popularity:</b> {track_info['popularity']}/100\n\n"
+                f"♪ <b>Artist:</b> <i>{track_info['artist']}</i>\n"
+                f"◉ <b>Album:</b> <i>{track_info['album']}</i>\n"
+                f"◈ <b>Released:</b> <i>{track_info['release_date']}</i>\n"
+                f"◷ <b>Length:</b> <i>{track_info['duration_formatted']}</i>\n"
+                f"✧ <b>Popularity:</b> <i>{track_info['popularity']}/100</i>\n\n"
                 f"<i>Select format to download:</i>"
             )
             
@@ -240,8 +239,7 @@ async def spotify_track_handler(_, message: Message):
     except Exception as e:
         await status_msg.edit_text(f"✖ Error: {str(e)}")
 
-
-@bot.on_message(filters.regex(SPOTIFY_ALBUM_REGEX) & is_ratelimited)
+@bot.on_message(filters.regex(SPOTIFY_ALBUM_REGEX) & is_ratelimiter_dl)
 async def spotify_album_handler(_, message: Message):
     """Handle Spotify album links with minimal response"""
     
@@ -271,9 +269,9 @@ async def spotify_album_handler(_, message: Message):
         # Create minimal info message
         info_text = (
             f"◉ <b>{album_name}</b>\n\n"
-            f"♪ <b>Artist:</b> {artist_name}\n"
-            f"◈ <b>Released:</b> {release_date}\n"
-            f"♫ <b>Tracks:</b> {total_tracks}\n\n"
+            f"♪ <b>Artist:</b> <i>{artist_name}</i>\n"
+            f"◈ <b>Released:</b> </i>{release_date}</i>\n"
+            f"♫ <b>Tracks:</b> <i>{total_tracks}</i>\n\n"
             f"<i>Individual track download only. Please send specific track links.</i>"
         )
         
@@ -290,7 +288,7 @@ async def spotify_album_handler(_, message: Message):
         await message.reply_text(f"✖ Error: {str(e)}", quote=True)
 
 
-@bot.on_message(filters.regex(SPOTIFY_PLAYLIST_REGEX) & is_ratelimited)
+@bot.on_message(filters.regex(SPOTIFY_PLAYLIST_REGEX) & is_ratelimiter_dl)
 async def spotify_playlist_handler(_, message: Message):
     """Handle Spotify playlist links with minimal response"""
     
@@ -319,8 +317,8 @@ async def spotify_playlist_handler(_, message: Message):
         # Create minimal info message
         info_text = (
             f"≡ <b>{playlist_name}</b>\n\n"
-            f"♫ <b>By:</b> {owner_name}\n"
-            f"♪ <b>Tracks:</b> {total_tracks}\n\n"
+            f"♫ <b>By:</b> <i>{owner_name}</i>\n"
+            f"♪ <b>Tracks:</b> </i>{total_tracks}</i>\n\n"
             f"<i>Individual track download only. Please send specific track links.</i>"
         )
         

@@ -17,7 +17,7 @@ from TelegramBot.helpers.dlp.yt_dl.ytdl_core import (
     clean_temporary_file,
     MAX_VIDEO_LENGTH_MINUTES
 )
-from TelegramBot.helpers.dlp.yt_dl.chach import (
+from TelegramBot.helpers.dlp.yt_dl.catch import (
     get_callback_data, get_video_info_from_cache, add_video_info_to_cache,
     clear_video_info_cache, clean_expired_cache
 )
@@ -135,10 +135,10 @@ async def handle_youtube_link(client: Client, message: Message) -> None:
         
         # Update message with video information and format selection
         await processing_msg.edit_text(
-            f"≡ __{info['title']}__\n\n"
+            f"≡ __{info['title'][:20]}...__\n\n"
             f"𓇳 Uploader: __{info['uploader']}__\n"
-            f"🕑 Duration: __{duration_str}__\n"
-            f"👁️ Views: __{info.get('view_count', 'N/A')}__\n\n"
+            f"⦿ Duration: __{duration_str}__\n"
+            f"⌘ Views: __{info.get('view_count', 'N/A')}__\n\n"
             f"Please select a format to download:",
             reply_markup=markup
         )
@@ -175,7 +175,7 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
         logger.error(f"Callback data not found or expired: {callback_id}")
         await callback_query.answer("This selection has expired. Please try again.", show_alert=True)
         try:
-            await message.edit_text("🕑 This selection has expired. Please request the YouTube link again.")
+            await message.edit_text("⦿ This selection has expired. Please request the YouTube link again.")
         except MessageNotModified:
             pass
         return
@@ -235,11 +235,11 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
             duration_str = str(timedelta(seconds=info['duration']))
             # Enhanced info display
             info_text = (
-                f"Title: {info['title']}\n"
-                f"Duration: {duration_str}\n"
-                f"Uploader: {info['uploader']}\n"
-                f"Views: {info.get('view_count', 'N/A')}\n"
-                f"Upload Date: {info.get('upload_date', 'N/A')}"
+                f"*Title*: __{info['title'][:20]}...__\n"
+                f"*Duration*: __{duration_str}__\n"
+                f"*Uploader*: __{info['uploader']}__\n"
+                f"*Views*: __{info.get('view_count', 'N/A')}__\n"
+                f"*Upload Date*: __{info.get('upload_date', 'N/A')}__"
             )
             await callback_query.answer(info_text, show_alert=True)
             return
@@ -347,7 +347,7 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
                     f"Do you want to proceed with the download?",
                     reply_markup=confirm_markup
                 )
-                await callback_query.answer("Large file detected, confirmation needed")
+                await callback_query.answer("⁂ Large file detected, confirmation needed")
                 return
             
             # Proceed with download
@@ -512,7 +512,7 @@ async def start_download(client : Client, callback_query, message, video_id, for
                 try:
                     await message.edit_text(
                         f"{progress_text}\n"
-                        f"Speed: {speed_text} | ETA: {eta_text}\n\n"
+                        f"∿ Speed: {speed_text} | ETA: {eta_text}\n\n"
                         f"≡ __{info['title']}__",
                         reply_markup=cancel_markup
                     )
@@ -546,7 +546,7 @@ async def start_download(client : Client, callback_query, message, video_id, for
                 if attempt < MAX_RETRIES - 1:
                     await message.edit_text(
                         f"⚠ Download attempt {attempt+1} failed, retrying...\n\n"
-                        f"Error: {result.get('error', 'Unknown error')}"
+                        f"⁂ Error: {result.get('error', 'Unknown error')}"
                     )
                     await asyncio.sleep(2)
             except Exception as e:
@@ -572,20 +572,21 @@ async def start_download(client : Client, callback_query, message, video_id, for
         
         # Upload the file to Telegram
         file_path = result['file_path']
-        title = result['title']
+        title = f"{result['title'][:20]}..."
         ext = result['ext']
+
         
         # Determine if it's audio or video based on extension
         is_audio = ext in ['mp3', 'm4a', 'aac', 'flac', 'opus', 'ogg']
         
-        await message.edit_text(f"📤 Uploading **{title}**...")
+        await message.edit_text(f"↥ Uploading __{title}__...")
         
         try:
             if is_audio:
                 await client.send_audio(
                     chat_id=message.chat.id,
                     audio=file_path,
-                    caption=f"🎵 __{title}__\n\n__Downloaded via__ @{(await client.get_me()).username}",
+                    caption=f"≡ __{title}__\n\n__Via__ @{(await client.get_me()).username}",
                     file_name=f"{title}.{ext}",
                     reply_to_message_id=callback_query.message.reply_to_message.id if callback_query.message.reply_to_message else None
                 )
@@ -593,7 +594,7 @@ async def start_download(client : Client, callback_query, message, video_id, for
                 await client.send_video(
                     chat_id=message.chat.id,
                     video=file_path,
-                    caption=f"≡ **{title}**\n\n__Downloaded via__ @{(await client.get_me()).username}",
+                    caption=f"≡ __{title}__\n\n__via__ @{(await client.get_me()).username}",
                     file_name=f"{title}.{ext}",
                     reply_to_message_id=callback_query.message.reply_to_message.id if callback_query.message.reply_to_message else None
                 )

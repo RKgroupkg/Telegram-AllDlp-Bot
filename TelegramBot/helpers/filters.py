@@ -11,6 +11,9 @@ from TelegramBot.helpers.ratelimiter import RateLimiter
 from TelegramBot.config import SUDO_USERID, OWNER_USERID
 
 
+from TelegramBot.logging import LOGGER
+logger = LOGGER(__name__)
+
 # command authorizations filters.
 def dev_users(_, __, message: Message) -> bool:
     return message.from_user.id in OWNER_USERID if message.from_user else False
@@ -50,6 +53,7 @@ async def ratelimiter(_, __, update: Union[Message, CallbackQuery]) -> bool:
     is_global_limited = await global_ratelimiter.acquire("globalupdate")
 
     if is_global_limited:
+        logger.info(f"Global Ratelimit hit while processing: {chatid}")
         return False
 
     chatid = update.chat.id if isinstance(update, Message) else update.message.chat.id
@@ -61,6 +65,7 @@ async def ratelimiter(_, __, update: Union[Message, CallbackQuery]) -> bool:
         if is_chatid_limited:
             if isinstance(update, CallbackQuery):
                 await update.answer("Bot is getting too many requests, please try again later.", show_alert=True)
+            logger.info(f"Chat Ratelimit hit for: {chatid}")
             return False
 
     return True
@@ -82,20 +87,29 @@ async def ratelimiter_dl(_, __, update: Union[Message, CallbackQuery]) -> bool:
     is_global_limited = await global_ratelimiter.acquire("globalupdate")
 
     if is_global_limited:
+        logger.info(f"Global Ratelimit hit while processing: {chatid}")
         return False
 
     chatid = update.chat.id if isinstance(update, Message) else update.message.chat.id
     chat_type = update.chat.type if isinstance(update, Message) else update.message.chat.type
 
     if chat_type != ChatType.PRIVATE:
-        is_chatid_limited = await dl_ratelimiter.acquire(chatid)
+        is_chatid_limited_dl = await dl_ratelimiter.acquire(chatid)
+        is_chatid_limited = await chatid_ratelimiter.acquire(chatid)
 
-        if is_chatid_limited:
+        if is_chatid_limited_dl:
             if isinstance(update, CallbackQuery):
                 await update.answer("You have reached the limit. Please try again in few minutes.", show_alert=True)
             elif isinstance(update, Message):
                 await update.reply_text("You have reached the limit. Please try again in few minutes.", quote=True)
+            logger.info(f"Chat dl Ratelimit hit for: {chatid}")
             return False
+        elif is_chatid_limited:
+            if isinstance(update, CallbackQuery):
+                logger.info(f"Chat Ratelimit hit for: {chatid}")
+                await update.answer("Bot is getting too many requests, please try again later.", show_alert=True)
+            return False
+
 
     return True
 

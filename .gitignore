@@ -2,8 +2,8 @@ venv/*
 .vscode/*
 *.pyc
 *.env
-TelegramBot.session
-TelegramBot.session-journal
 log.txt
 config.env
 cookies.txt
+Quick Dl.session
+.cache

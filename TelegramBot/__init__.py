@@ -1,4 +1,5 @@
 import sys
+import logging as log
 import time
 import uvloop
 from pyrogram import Client
@@ -14,6 +15,7 @@ from keep_alive_ping import KeepAliveService
 # for render and koyeb comment it ou uf you dont need it 
 
 service = KeepAliveService(
+    log_level = log.ERROR, # no need for info 
     ping_interval=60  # Ping every 1 minutes
 )
 
@@ -59,7 +61,7 @@ telegraph = Telegraph(domain="graph.org")
 LOGGER(__name__).info("initiating the client....")
 plugins = dict(root="TelegramBot/plugins")  # https://docs.pyrogram.org/topics/smart-plugins
 bot = Client(
-    "TelegramBot",
+    "Quick Dl",
     api_id=config.API_ID,
     api_hash=config.API_HASH,
     bot_token=config.BOT_TOKEN,

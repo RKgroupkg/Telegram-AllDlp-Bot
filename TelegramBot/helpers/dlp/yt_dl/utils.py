@@ -4,7 +4,7 @@ import re
 from typing import List, Dict, Any, Optional
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from TelegramBot.helpers.dlp.yt_dl.chach import store_callback_data
+from TelegramBot.helpers.dlp.yt_dl.catch import store_callback_data
 
 YT_LINK_REGEX = r"(?:https?:\/\/)?(?:www\.|m\.|music\.)?" + \
                 r"(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|playlist\?(?:.*&)?list=|" + \
@@ -57,18 +57,18 @@ def generate_format_buttons(formats: List[Dict[str, Any]], page: int = 0, items_
             quality = fmt.get('height', 'N/A')
             file_size = fmt.get('filesize', fmt.get('filesize_approx', 0))
             size_text = f"{file_size / (1024 * 1024):.1f}MB" if file_size else "Unknown"
-            label = f"🎬 {quality}p • {fmt.get('ext')} • {size_text}"
+            label = f"≡ {quality}p • {fmt.get('ext')} • {size_text}"
         elif fmt.get('vcodec') != 'none':
             # Video only
             quality = fmt.get('height', 'N/A')
             file_size = fmt.get('filesize', fmt.get('filesize_approx', 0))
             size_text = f"{file_size / (1024 * 1024):.1f}MB" if file_size else "Unknown"
-            label = f"📹 {quality}p • {fmt.get('ext')} • {size_text}"
+            label = f"⌬ {quality}p • {fmt.get('ext')} • {size_text}"
         else:
             # Audio only
             file_size = fmt.get('filesize', fmt.get('filesize_approx', 0))
             size_text = f"{file_size / (1024 * 1024):.1f}MB" if file_size else "Unknown"
-            label = f"🎵 {fmt.get('asr', 'N/A')}kHz • {fmt.get('ext')} • {size_text}"
+            label = f"∻ {fmt.get('asr', 'N/A')}kHz • {fmt.get('ext')} • {size_text}"
         
         # Store format selection data in cache and get a callback ID
         format_data = {
@@ -162,15 +162,15 @@ def generate_format_buttons(formats: List[Dict[str, Any]], page: int = 0, items_
         
         filter_buttons = [
             InlineKeyboardButton(
-                text="🎬 All",
+                text="∑ All",
                 callback_data=f"ytfilter_{all_callback_id}"
             ),
             InlineKeyboardButton(
-                text="📹 Video",
+                text="⌬ Video",
                 callback_data=f"ytfilter_{video_callback_id}"
             ),
             InlineKeyboardButton(
-                text="🎵 Audio",
+                text="∻ Audio",
                 callback_data=f"ytfilter_{audio_callback_id}"
             )
         ]

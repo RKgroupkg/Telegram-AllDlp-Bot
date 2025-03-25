@@ -4,9 +4,9 @@ import os
 import time
 
 from TelegramBot.helpers.dlp.yt_dl.utils import YT_LINK_REGEX
-from TelegramBot.helpers.dlp.yt_dl.chach import clean_expired_cache
+from TelegramBot.helpers.dlp.yt_dl.catch import clean_expired_cache
 from TelegramBot.helpers.dlp.yt_dl.callback import handle_youtube_link, handle_youtube_callback
-from TelegramBot.helpers.filters import is_ratelimiter_dl
+from TelegramBot.helpers.filters import is_ratelimiter_dl , is_ratelimited
 from TelegramBot.helpers.filters import sudo_cmd
 
 from TelegramBot.logging import LOGGER
@@ -88,10 +88,10 @@ async def youtube_callback_handler(client: Client, callback_query: CallbackQuery
     await handle_youtube_callback(client, callback_query)
 
 # Command to show statistics about the YouTube downloader
-@Client.on_message(filters.command(["ytstats"]))
+@Client.on_message(filters.command(["ytstats"]),is_ratelimited)
 async def yt_stats_command(client: Client, message: Message):
     """Show statistics about the YouTube downloader"""
-    from TelegramBot.helpers.dlp.yt_dl.chach import callback_cache, video_info_cache
+    from TelegramBot.helpers.dlp.yt_dl.catch import callback_cache, video_info_cache
     
     # Get stats
     total_callback_cache = len(callback_cache)

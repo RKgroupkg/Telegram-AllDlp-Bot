@@ -1,4 +1,5 @@
 from pyrogram import filters
+from pyrogram.enums import ParseMode
 from pyrogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
@@ -17,18 +18,19 @@ from TelegramBot.helpers.start_constants import (
     ABOUT_CAPTION,
     DEV_TEXT,
     SUDO_TEXT,
+    DLP_TEXT,
 )
 
 
 START_BUTTON = [
     [
-        InlineKeyboardButton("📖 Commands", callback_data="COMMAND_BUTTON"),
-        InlineKeyboardButton("👨‍💻 About me", callback_data="ABOUT_BUTTON"),
+        InlineKeyboardButton("⌤ Commands", callback_data="COMMAND_BUTTON"),
+        InlineKeyboardButton("∴ About me", callback_data="ABOUT_BUTTON"),
     ],
     [
         InlineKeyboardButton(
-            "🔭 Original Repo",
-            url="https://github.com/sanjit-sinha/TelegramBot-Boilerplate",
+            "Original Repo",
+            url="https://github.com/RKgroupkg/Telegram-AllDlp-Bot",
         )
     ],
 ]
@@ -36,16 +38,19 @@ START_BUTTON = [
 
 COMMAND_BUTTON = [
     [
+        InlineKeyboardButton("DLP", callback_data="DLP_BUTTON")
+    ],
+    [
         InlineKeyboardButton("Users", callback_data="USER_BUTTON"),
         InlineKeyboardButton("Sudo", callback_data="SUDO_BUTTON"),
     ],
     [InlineKeyboardButton("Developer", callback_data="DEV_BUTTON")],
-    [InlineKeyboardButton("🔙 Go Back", callback_data="START_BUTTON")],
+    [InlineKeyboardButton("◄ Go Back", callback_data="START_BUTTON")],
 ]
 
 
-GOBACK_1_BUTTON = [[InlineKeyboardButton("🔙 Go Back", callback_data="START_BUTTON")]]
-GOBACK_2_BUTTON = [[InlineKeyboardButton("🔙 Go Back", callback_data="COMMAND_BUTTON")]]
+GOBACK_1_BUTTON = [[InlineKeyboardButton("◄ Go Back", callback_data="START_BUTTON")]]
+GOBACK_2_BUTTON = [[InlineKeyboardButton("◄ Go Back", callback_data="COMMAND_BUTTON")]]
 
 
 @bot.on_message(filters.command(["start", "help"]) & is_ratelimited)
@@ -103,6 +108,12 @@ async def botCallbacks(_, CallbackQuery: CallbackQuery):
     elif CallbackQuery.data == "USER_BUTTON":
         await CallbackQuery.edit_message_text(
             USER_TEXT, reply_markup=InlineKeyboardMarkup(GOBACK_2_BUTTON)
+        )
+    elif CallbackQuery.data == "DLP_BUTTON":
+        await CallbackQuery.edit_message_text(
+            DLP_TEXT,
+            parse_mode = ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup(GOBACK_2_BUTTON)
         )
     await CallbackQuery.answer()
 
