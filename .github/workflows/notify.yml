@@ -30,16 +30,23 @@ jobs:
       - name: ├─ Analyze Commit Details
         id: commit-analysis
         env:
-          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || github.event.pull_request.title }}
           COMMIT_HASH: ${{ github.sha }}
-          AUTHOR_NAME: ${{ github.event.head_commit.author.name }}
+          AUTHOR_NAME: ${{ github.event.head_commit.author.name || github.event.pull_request.user.login }}
+          # For push events, this value exists. For PR events, you may adjust accordingly.
+          COMMIT_TIMESTAMP: ${{ github.event.head_commit.timestamp || github.event.pull_request.updated_at }}
         shell: bash
         run: |
-          # Retrieve git diff statistics
-          LINES_CHANGED=$(git diff --shortstat HEAD^..HEAD | awk '{print $4 + $6}')
-          FILES_MODIFIED=$(git diff --name-only HEAD^..HEAD | wc -l)
+          # Retrieve git diff statistics (only for push events)
+          if [ -n "$COMMIT_MESSAGE" ]; then
+            LINES_CHANGED=$(git diff --shortstat HEAD^..HEAD | awk '{print ($4?$4:0) + ($6?$6:0)}')
+            FILES_MODIFIED=$(git diff --name-only HEAD^..HEAD | wc -l)
+          else
+            LINES_CHANGED="N/A"
+            FILES_MODIFIED="N/A"
+          fi
           
-          # Truncate and escape commit message
+          # Truncate and escape commit message (or PR title)
           TRUNCATED_MESSAGE=$(echo "$COMMIT_MESSAGE" | head -n 1 | cut -c1-200)
           ESCAPED_MESSAGE=$(printf '%s' "$TRUNCATED_MESSAGE" | jq -R -s '.')
           
@@ -49,6 +56,7 @@ jobs:
           echo "author=$AUTHOR_NAME" >> $GITHUB_OUTPUT
           echo "lines_changed=$LINES_CHANGED" >> $GITHUB_OUTPUT
           echo "files_modified=$FILES_MODIFIED" >> $GITHUB_OUTPUT
+          echo "commit_timestamp=$COMMIT_TIMESTAMP" >> $GITHUB_OUTPUT
 
       - name: └─ Send Detailed Telegram Notification
         uses: appleboy/telegram-action@master
@@ -58,12 +66,14 @@ jobs:
           message: |
             ◈ Commit Notification ◈
 
-            *Repository:* `${{ github.repository }}`
-            *Branch:*    `${{ github.ref_name }}`
+            *Repository:* __${{ github.repository }}__
+            *Branch:*    __${{ github.ref_name }}__
+            *Event:*     __${{ github.event_name }}__
 
             ╭─ Commit Metadata
             │ • Hash:   `${{ steps.commit-analysis.outputs.short_hash }}`
             │ • Author: ${{ steps.commit-analysis.outputs.author }}
+            │ • Date:   `${{ steps.commit-analysis.outputs.commit_timestamp }}`
             ╰─────────────────────────────
 
             ╭─ Commit Scope
@@ -71,14 +81,14 @@ jobs:
             │ • Lines Modified: ${{ steps.commit-analysis.outputs.lines_changed }}
             ╰─────────────────────────────
 
-            *Commit Message:*
+            *Message:*
             ```
             ${{ steps.commit-analysis.outputs.truncated_message }}
             ```
 
             ┌─ Quick Actions ─┐
-            │ [📋 View Commit](
-            ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
+            │ [📋 View Commit](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
+            │ [🔍 Compare Changes](${{ github.event_name == 'push' ? github.event.compare : github.event.pull_request.diff_url }})
             └─────────────────┘
           format: markdown
           disable_web_page_preview: true
