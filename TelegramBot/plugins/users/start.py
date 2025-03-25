@@ -19,6 +19,8 @@ from TelegramBot.helpers.start_constants import (
     DEV_TEXT,
     SUDO_TEXT,
     DLP_TEXT,
+    BOT_PFP,
+    START_CAPTION_gr,
 )
 
 
@@ -29,24 +31,53 @@ START_BUTTON = [
     ],
     [
         InlineKeyboardButton(
-            "Original Repo",
-            url="https://github.com/RKgroupkg/Telegram-AllDlp-Bot",
+            "♚ Need Help",
+            url="https://t.me/Rkgroup_helpbot?start=start",
         )
     ],
+    [
+        InlineKeyboardButton(
+            "♔ Updates",
+            url="https://t.me/rkgroup_update",
+        )
+    ],
+
 ]
 
 
 COMMAND_BUTTON = [
     [
-        InlineKeyboardButton("DLP", callback_data="DLP_BUTTON")
+        InlineKeyboardButton("⚜ DLP", callback_data="DLP_BUTTON")
     ],
     [
-        InlineKeyboardButton("Users", callback_data="USER_BUTTON"),
-        InlineKeyboardButton("Sudo", callback_data="SUDO_BUTTON"),
+        InlineKeyboardButton("⚜ Users", callback_data="USER_BUTTON"),
+        InlineKeyboardButton("⚜ Sudo", callback_data="SUDO_BUTTON"),
     ],
-    [InlineKeyboardButton("Developer", callback_data="DEV_BUTTON")],
+    [InlineKeyboardButton("⚜ Developer", callback_data="DEV_BUTTON")],
     [InlineKeyboardButton("◄ Go Back", callback_data="START_BUTTON")],
 ]
+
+ABOUT_ME_BUTTON =[
+    [    InlineKeyboardButton(
+            "♔ Source",
+            url="https://github.com/RKgroupkg/Telegram-AllDlp-Bot",
+        )
+    ],
+    [    InlineKeyboardButton(
+            "♧ Privacy Policy",
+            url="https://telegra.ph/Quick-Dl-03-25",
+        ),
+    ],
+    [
+        InlineKeyboardButton(
+            "♧ Code Of Conduct",
+            url="https://telegra.ph/Quick-Dl-03-25-2",
+        )
+   ],
+    [
+        InlineKeyboardButton("◄ Go Back", callback_data="START_BUTTON")
+    ],
+    ]
 
 
 GOBACK_1_BUTTON = [[InlineKeyboardButton("◄ Go Back", callback_data="START_BUTTON")]]
@@ -56,8 +87,12 @@ GOBACK_2_BUTTON = [[InlineKeyboardButton("◄ Go Back", callback_data="COMMAND_B
 @bot.on_message(filters.command(["start", "help"]) & is_ratelimited)
 async def start(_, message: Message):
     await database.save_user(message.from_user)
-    return await message.reply_text(
-        START_CAPTION, reply_markup=InlineKeyboardMarkup(START_BUTTON), quote=True
+        
+    return await message.reply_photo(
+        photo = BOT_PFP,
+        caption = START_CAPTION,
+        reply_markup=InlineKeyboardMarkup(START_BUTTON),
+        quote=True
     )
 
 
@@ -92,7 +127,7 @@ async def botCallbacks(_, CallbackQuery: CallbackQuery):
 
     if CallbackQuery.data == "ABOUT_BUTTON":
         await CallbackQuery.edit_message_text(
-            ABOUT_CAPTION, reply_markup=InlineKeyboardMarkup(GOBACK_1_BUTTON)
+            ABOUT_CAPTION, reply_markup=InlineKeyboardMarkup(ABOUT_ME_BUTTON)
         )
 
     elif CallbackQuery.data == "START_BUTTON":
@@ -129,3 +164,4 @@ async def new_chat(_, message: Message):
     for new_user in message.new_chat_members:
         if new_user.id == bot.me.id:
             await database.save_chat(chatid)
+    

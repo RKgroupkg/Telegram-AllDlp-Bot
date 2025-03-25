@@ -2,6 +2,7 @@ from TelegramBot.version import (__python_version__, __version__, __pyro_version
 from TelegramBot import bot
 
 BOT_NAME = f"@Quick_dlbot"
+BOT_PFP = "https://raw.githubusercontent.com/RKgroupkg/RKGROUP/refs/heads/main/Assets/Logo/IMG_20250324_003813_410.jpg"
 DLP_TEXT ="""
 
 <b>━━━〔 Dlp Cmd Doc 〕━━━</b>
@@ -65,12 +66,16 @@ ABOUT_CAPTION = f"""• Python version : {__python_version__}
 • 𝙱𝚘𝚝 𝚟𝚎𝚛𝚜𝚒𝚘𝚗: {__version__}
 • 𝚙𝚢𝚛𝚘𝚐𝚛𝚊𝚖  𝚟𝚎𝚛𝚜𝚒𝚘𝚗 : {__pyro_version__}
 • 𝙻𝚒𝚌𝚎𝚗𝚜𝚎 : {__license__}
-
-**Github Repo**: https://github.com/RKgroupkg/Pyrogram◇ Bot/"""
+"""
 
 START_ANIMATION = "https://images.app.goo.gl/hjN3cqtM43Bs95fJ6"
 
 START_CAPTION = """
 **Step into a world of swift downloads**.\n From __Instagram__ to ___Spotify__ to __Youtube__, I deliver with professional precision.
 """
+
+START_CAPTION_gr= """
+**Thanks for adding me In !**\n\n\n**Step into a world of swift downloads**.\n From __Instagram__ to ___Spotify__ to __Youtube__, I deliver with professional precision.
+"""
+
 COMMAND_CAPTION = """**𝙷𝚎𝚛𝚎 𝚊𝚛𝚎 𝚝𝚑𝚎 𝚕𝚒𝚜𝚝 𝚘𝚏 𝚌𝚘𝚖𝚖𝚊𝚗𝚍𝚜 𝚠𝚑𝚒𝚌𝚑 𝚢𝚘𝚞 𝚌𝚊𝚗 𝚞𝚜𝚎 𝚒𝚗 𝚋𝚘𝚝.\n**"""

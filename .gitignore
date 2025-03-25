@@ -7,3 +7,4 @@ config.env
 cookies.txt
 Quick Dl.session
 .cache
+logs.txt
