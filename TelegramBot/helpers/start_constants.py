@@ -23,7 +23,7 @@ To download Spotify tracks or songs.
 </i>
 """
 USER_TEXT = """
-🗒️️ 𝙳𝚘𝚌𝚞𝚖𝚎𝚗𝚝𝚊𝚝𝚒𝚘𝚗 𝚏𝚘𝚛 𝚌𝚘𝚖𝚖𝚊𝚗𝚍𝚜 𝚊𝚟𝚊𝚒𝚕𝚊𝚋𝚕𝚎 𝚝𝚘 𝚞𝚜𝚎𝚛'𝚜
+━━━〔 Utils Cmd Doc 〕━━━
 
 • /start: To Get this message
 
@@ -37,7 +37,7 @@ USER_TEXT = """
 """
 
 SUDO_TEXT = """
-🗒️ 𝙳𝚘𝚌𝚞𝚖𝚎𝚗𝚝𝚊𝚝𝚒𝚘𝚗 𝚏𝚘𝚛 𝚂𝚞𝚍𝚘 𝚄𝚜𝚎𝚛𝚜 𝚌𝚘𝚖𝚖𝚊𝚗𝚍𝚜.
+━━━〔 Sudo Cmd Doc 〕━━━
 • /speedtest: Check the internet speed of bot server.
 
 • /serverstats: Get the stats of server.
@@ -47,10 +47,14 @@ SUDO_TEXT = """
 • /stats: Alias command for serverstats
 
 • /log: To get the log file of the bot.
+
+• /clean_ytcache: Clears the catch.
+
+• /ytstats: shows Yt stats
 """
 
 DEV_TEXT = """
-🗒️𝙳𝚘𝚌𝚞𝚖𝚎𝚗𝚝𝚊𝚝𝚒𝚘𝚗 𝚏𝚘𝚛 𝙳𝚎𝚟𝚎𝚕𝚘𝚙𝚎𝚛𝚜 𝙲𝚘𝚖𝚖𝚊𝚗𝚍𝚜.
+━━━〔 Dev Cmd Doc 〕━━━
 • /update: Update the bot to latest commit from repository. 
 
 • /restart: Restart the bot.
