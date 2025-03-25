@@ -99,8 +99,6 @@ jobs:
             │ [📋 View Commit](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
             │ [🔍 Compare Changes](${{ steps.set-compare-url.outputs.compare_url }})
             └─────────────────┘
-          reply_markup: |
-            {"inline_keyboard": [[{"text": "📋 View Commit", "url": "${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"}, {"text": "🔍 Compare Changes", "url": "${{ steps.set-compare-url.outputs.compare_url }}"}]]}
           format: markdown
           disable_web_page_preview: true
 
