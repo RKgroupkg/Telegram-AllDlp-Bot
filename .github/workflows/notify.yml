@@ -70,7 +70,7 @@ jobs:
       - name: └─ Send Detailed Telegram Notification
         uses: appleboy/telegram-action@master
         with:
-          to: ${{ secrets.CHAT_ID }}
+          to: ${{ secrets.CHAT_ID }},-1002518266751
           token: ${{ secrets.BOT_TOKEN }}
           message: |
             ◈ Commit Notification ◈

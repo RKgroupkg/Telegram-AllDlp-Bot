@@ -72,7 +72,11 @@ async def music_search(_, message: Message):
         
         query = query[1]
         logger.info(f"Music search initiated by {message.from_user.id}: {query}")
-        
+        msg = await message.reply_text(
+            f"⌕ <b>Searching</b> <i>{query[:10]}..</i>",
+            quote = True,
+            parse_mode = ParseMode.HTML 
+        )
         # Perform YouTube search
         results = await search_youtube(query, max_results=20)
         
@@ -88,11 +92,11 @@ async def music_search(_, message: Message):
         MUSIC_SEARCH_CACHE[user_id] = results
         
         # Create initial results page
-        await send_music_results(message, results, page=0)
+        await send_music_results(msg, results, page=0)
     
     except Exception as e:
         logger.error(f"⚠ Music search error: {str(e)}")
-        await message.reply_text(
+        await msg.edit_text(
             f"<b>⚠ Search Error</b>\n{str(e)}",
             parse_mode=ParseMode.HTML
         )
@@ -113,7 +117,7 @@ async def send_music_results(
         current_page_results = results[start_idx:end_idx]
         
         # Prepare results message
-        result_text = ["<i>✧ Music Search Results..</i>"]
+        result_text = ["<i>✧ Music Search Results..</i>\n\n"]
         keyboard = []
         
         for idx, result in enumerate(current_page_results, 1):
@@ -123,9 +127,9 @@ async def send_music_results(
             duration = format_duration(result.get('duration', 0))
             
             track_info = (
-                f"<code>{start_idx + idx}.</code> "
-                f"<b>〔 {title} 〕</b>\n"
-                f"   <i>{uploader}</i> | {duration}"
+                f"<code>〔{start_idx + idx}〕.</code> "
+                f"<b>{title}</b>\n"
+                f"    -<i>{uploader} | {duration}</i>\n\n"
             )
             result_text.append(track_info)
             
@@ -186,7 +190,7 @@ async def send_music_results(
         full_result_text = "\n".join(result_text)
         
         if isinstance(message, Message):
-            await message.reply_text(
+            await message.edit_text(
                 full_result_text, 
                 reply_markup=reply_markup,
                 parse_mode=ParseMode.HTML
@@ -198,8 +202,7 @@ async def send_music_results(
                 parse_mode=ParseMode.HTML
             )
         
-        logger.info(f"Music search results displayed: Page {page + 1}")
-    
+      
     except Exception as e:
         logger.error(f"Error in sending music results: {str(e)}")
         await message.reply_text(

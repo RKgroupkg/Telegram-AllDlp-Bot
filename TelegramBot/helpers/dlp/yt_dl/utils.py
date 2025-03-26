@@ -156,6 +156,7 @@ def generate_format_buttons(formats: List[Dict[str, Any]], page: int = 0, items_
             'page': 0
         }
         
+        
         all_callback_id = store_callback_data(all_filter_data)
         video_callback_id = store_callback_data(video_filter_data)
         audio_callback_id = store_callback_data(audio_filter_data)
@@ -174,8 +175,33 @@ def generate_format_buttons(formats: List[Dict[str, Any]], page: int = 0, items_
                 callback_data=f"ytfilter_{audio_callback_id}"
             )
         ]
+        
+        flac_filter_data = {
+            'type': 'flac_filter',
+            'video_id': formats[0].get('video_id'),
+            'page': page
+        }
+        flac_callback_id = store_callback_data(flac_filter_data)
+        
+        best_filter_data = {
+            'type': 'best_filter',
+            'video_id': formats[0].get('video_id'),
+            'page': page
+        }
+        best_callback_id = store_callback_data(best_filter_data)
+        
+        flac_button = [
+            InlineKeyboardButton(
+                text="♪ Flac Audio",
+                callback_data=f"ytflac_{flac_callback_id}"  # Use consistent prefix
+            ),
+            InlineKeyboardButton(
+                text="♛ Best Video",
+                callback_data=f"ytbest_{best_callback_id}"  # Use consistent prefix
+            )
+        ]
         buttons.append(filter_buttons)
-    
+        buttons.append(flac_button)
     # Add cancel button
     if formats:
         cancel_data = {

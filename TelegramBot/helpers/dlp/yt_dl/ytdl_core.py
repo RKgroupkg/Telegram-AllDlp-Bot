@@ -25,6 +25,58 @@ from TelegramBot.config import(
 os.makedirs(YT_DOWNLOAD_PATH, exist_ok=True)
 os.makedirs(DEFAULT_COOKIES_DIR, exist_ok=True)
 
+
+# Utils
+def beautify_views(views):
+    """
+    Format view counts in a human-readable way.
+    
+    Handles various input types including strings, integers, and floats.
+    Supports inputs with non-digit characters and handles edge cases.
+    
+    Args:
+        views: The view count (string, integer, float, or None)
+        
+    Returns:
+        Formatted view count as a string (e.g., "1.2k", "3.4m", "42")
+    
+    Examples:
+        >>> beautify_views(1234)
+        '1.2k'
+        >>> beautify_views('56,789')
+        '56.8k'
+        >>> beautify_views(1234567)
+        '1.2m'
+        >>> beautify_views(None)
+        '0'
+        >>> beautify_views('abc')
+        '0'
+    """
+    # Handle None or empty inputs
+    if views is None:
+        return "0"
+    
+    # Convert input to string and extract only digits
+    try:
+        # Remove any non-digit characters except potential decimal point
+        views_str = ''.join(char for char in str(views) if char.isdigit() or char == '.')
+        
+        # Convert to float, handling potential conversion errors
+        views_num = float(views_str) if views_str else 0
+    except (ValueError, TypeError):
+        return "0"
+    
+    # Format based on magnitude
+    if views_num < 1000:
+        return str(int(views_num))
+    elif views_num < 1_000_000:
+        return f"{views_num / 1000:.1f}k"
+    elif views_num < 1_000_000_000:
+        return f"{views_num / 1_000_000:.1f}m"
+    else:
+        return f"{views_num / 1_000_000_000:.1f}b"
+
+
 # Cookie rotation management
 class CookieManager:
     _instance = None
@@ -191,7 +243,6 @@ async def search_youtube(
     query: str, 
     max_results: int = 1,  # Changed to 1 to return top result only
     include_playlists: bool = False,
-    search_region: str = None,
     language: str = None,
     timeout: int = 15,
     use_cookie: bool = True
@@ -223,6 +274,7 @@ async def search_youtube(
         'no_warnings': True,
         'extract_flat': 'in_playlist',  # Changed to get more info while keeping playlist structure
         'default_search': 'ytsearch',
+        "geo_bypass": True,
         'noplaylist': not include_playlists,
         'socket_timeout': timeout,
         'ignoreerrors': True,
@@ -231,10 +283,6 @@ async def search_youtube(
         'playlist_items': f'1-{max_results}',
         'user_agent': user_agent,
     }
-    
-    # Add optional parameters if provided
-    if search_region:
-        ydl_opts['geo_bypass_country'] = search_region
     
     if language:
         ydl_opts['extractor_args'] = {'youtube': {'lang': [language]}}
@@ -368,8 +416,10 @@ async def fetch_youtube_info(video_id: str) -> Optional[Dict[str, Any]]:
     user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     
     ydl_opts = {
-        'format': 'best',
         'quiet': True,
+        'simulate': True,
+        'skip_download': True,
+        "nocheckcertificate": True,
         'no_warnings': True,
         'noplaylist': True,
         'socket_timeout': 30,
@@ -507,7 +557,9 @@ async def format_progress(current: int, total: int, start_time: float) -> str:
 async def download_youtube_video(
     video_id: str, 
     format_id: str, 
-    progress_callback: Callable[[Dict[str, Any]], Coroutine]
+    progress_callback: Callable[[Dict[str, Any]], Coroutine],
+    bestflac: bool = False, 
+    bestVideo: bool = False,
 ) -> Dict[str, Any]:
     """
     Download a YouTube video with progress updates
@@ -531,19 +583,58 @@ async def download_youtube_video(
     
     # Common user agent to avoid 403 errors
     user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    
-    ydl_opts = {
-        'format': format_id,
-        'quiet': True,
-        'no_warnings': True,
-        'noplaylist': True,
-        'outtmpl': output_template,
-        'socket_timeout': 30,
-        'retries': 5,
-        'fragment_retries': 5,
-        'ignoreerrors': False,
-        'user_agent': user_agent,
-    }
+    # Common options
+    if bestflac:
+        ydl_opts = {
+            'format': "bestaudio",
+            "nocheckcertificate": True,
+            "addmetadata": True,
+            "prefer_ffmpeg": False,
+            "geo_bypass": True,
+            'quiet': True,
+            'no_warnings': True,
+            'outtmpl': output_template,
+            'socket_timeout': 30,
+            'retries': 5,
+            'fragment_retries': 5,
+            'user_agent': user_agent,
+            "postprocessors": [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'flac', 'preferredquality': '693'}]
+        }
+    elif bestVideo:
+        ydl_opts = {
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',  # Best video + best audio, fallback to best available
+            "nocheckcertificate": True,
+            "addmetadata": True,
+            "prefer_ffmpeg": True,  # Ensure ffmpeg is used for merging
+            "merge_output_format": "mp4",  # Ensure the final output is in a proper format
+            "geo_bypass": True,
+            'quiet': True,
+            'no_warnings': True,
+            'outtmpl': output_template,
+            'socket_timeout': 30,
+            'retries': 5,
+            'fragment_retries': 5,
+            'user_agent': user_agent,
+             "postprocessors": [
+            {'key': 'FFmpegMerger', 'preferedformat': 'mp4'}  # Merges streams properly
+        ]
+        }
+
+
+    else:
+        ydl_opts = {
+            'format': format_id,
+            "nocheckcertificate": True,
+            "addmetadata": True,
+            "geo_bypass": True,
+            'quiet': True,
+            'no_warnings': True,
+            'outtmpl': output_template,
+            'socket_timeout': 30,
+            'retries': 5,
+            'fragment_retries': 5,
+            'user_agent': user_agent,
+        }
     
     # Add cookie file if available
     if cookie_file:
@@ -673,31 +764,19 @@ async def download_youtube_video(
     stop_event.set()
     await progress_task
     
-    # Determine actual file path
-    if 'requested_downloads' in info and info['requested_downloads']:
-        file_path = info['requested_downloads'][0]['filepath']
-    else:
-        # Fallback file path construction
-        ext = info.get('ext', None)
-        if not ext and 'formats' in info:
-            # Try to get extension from format
-            for fmt in info['formats']:
-                if fmt.get('format_id') == format_id:
-                    ext = fmt.get('ext')
-                    break
-        
-        if not ext:
-            # Last resort default
-            ext = 'mp4'
-            
-        file_path = os.path.join(YT_DOWNLOAD_PATH, f"{video_id}.{ext}")
+    file_path = get_final_file_path(info, video_id, bestflac,bestVideo)
+    
+    ext = file_path.split('.')[-1] if '.' in file_path else ''
+    
     
     if os.path.exists(file_path):
         return {
             'success': True,
             'file_path': file_path,
             'title': info.get('title', 'Unknown Title'),
-            'ext': info.get('ext', 'unknown'),
+            'performer': info.get('uploader', 'Unknown Channel'),
+            'thumbnail': info.get('thumbnail', ''),
+            'ext': ext,
             'filesize': os.path.getsize(file_path),
             'duration': info.get('duration', 0)
         }
@@ -706,7 +785,55 @@ async def download_youtube_video(
             'success': False,
             'error': "Download completed but file not found at expected location"
         }
+
+def get_final_file_path(info, video_id: str, bestflac:bool =False,bestVideo: bool = False):
+    """
+    Robustly determine the final downloaded file path.
     
+    Args:
+        info: YouTube download info dictionary
+        video_id: Video identifier
+        bestflac: Whether FLAC conversion was requested
+    
+    Returns:
+        Detected file path
+    """
+    
+    # Check postprocessed files
+    if bestflac:
+        possible_paths = [
+            os.path.join(YT_DOWNLOAD_PATH, f"{video_id}.flac"),
+            os.path.join(YT_DOWNLOAD_PATH, f"{video_id}.m4a"),  # Alternate audio formats
+            os.path.join(YT_DOWNLOAD_PATH, f"{video_id}.webm")
+        ]
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                logger.info(f"Found file for FLAC conversion: {path}")
+                return path
+    elif bestVideo:
+        possible_paths = [
+            os.path.join(YT_DOWNLOAD_PATH, f"{video_id}.mp4"),
+            os.path.join(YT_DOWNLOAD_PATH, f"{video_id}.webm"),  # Alternate Video formats
+        ]
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                logger.info(f"Found file for FLAC conversion: {path}")
+                return path
+
+     # Check requested downloads first
+    if 'requested_downloads' in info and info['requested_downloads']:
+        file_path = info['requested_downloads'][0]['filepath']
+        if os.path.exists(file_path):
+            return file_path
+    # Fallback filename construction
+    ext = 'flac' if bestflac else 'mp4'
+    fallback_path = os.path.join(YT_DOWNLOAD_PATH, f"{video_id}.{ext}")
+    
+    return fallback_path,ext
+
+
 def is_valid_youtube_id(video_id: str) -> bool:
     """
     Check if the provided string is a valid YouTube video ID

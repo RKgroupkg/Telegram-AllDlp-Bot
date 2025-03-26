@@ -13,7 +13,8 @@ from TelegramBot.helpers.dlp.yt_dl.ytdl_core import (
     download_youtube_video,
     format_progress,
     clean_temporary_file,
-    MAX_VIDEO_LENGTH_MINUTES
+    MAX_VIDEO_LENGTH_MINUTES,
+    beautify_views
 )
 from TelegramBot.helpers.dlp.yt_dl.catch import (
     get_callback_data, get_video_info_from_cache, add_video_info_to_cache,
@@ -128,10 +129,10 @@ async def handle_youtube_link(client: Client, message: Message) -> None:
         
         # Update message with video information and format selection
         await processing_msg.edit_text(
-            f"≡ __{info['title'][:20]}...__\n\n"
+            f"≡ __{info['title'][:30]}...__\n\n"
             f"𓇳 Uploader: __{info['uploader']}__\n"
             f"⦿ Duration: __{duration_str}__\n"
-            f"⌘ Views: __{info.get('view_count', 'N/A')}__\n\n"
+            f"⌘ Views: __{beautify_views(int(info.get('view_count', 'N/A')))}__\n\n"
             f"Please select a format to download:",
             reply_markup=markup
         )
@@ -228,15 +229,15 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
             duration_str = str(timedelta(seconds=info['duration']))
             # Enhanced info display
             info_text = (
-                f"♔ *Title*: __{info['title'][:20]}...__\n"
+                f"♔ *Title*: __{info['title'][:30]}...__\n"
                 f"✿ *Duration*: __{duration_str}__\n"
                 f"♚ *Uploader*: __{info['uploader']}__\n"
-                f"✦ *Views*: __{info.get('view_count', 'N/A')}__\n"
+                f"✦ *Views*: __{beautify_views(int(info.get('view_count', 'N/A')))}__\n"
                 f"۞ *Upload Date*: __{info.get('upload_date', 'N/A')}__"
             )
             await callback_query.answer(info_text, show_alert=True)
             return
-            
+
         elif callback_type == "ytfilter":
             video_id = cached_data.get('video_id')
             filter_type = cached_data.get('filter_type')
@@ -285,7 +286,57 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
                 pass
             await callback_query.answer(f"Page {page+1}")
             return
+        
+        elif callback_type in ["ytbest", "yt_best"]:
+            video_id = cached_data.get('video_id')
+    
+            # Verify cached data exists and is valid
+            if not video_id:
+                await callback_query.answer("⚠ Invalid callback data", show_alert=True)
+                return
             
+            info = get_video_info_from_cache(video_id)
+            if not info:
+                await callback_query.answer("⚠ Video information not available", show_alert=True)
+                return
+            
+            # Specific FLAC format handling
+            format_id = "best_video"
+            
+            await start_download(
+                client, 
+                callback_query, 
+                message, 
+                video_id, 
+                format_id, 
+                info, 
+                format_id
+            )
+        elif callback_type in ["ytflac", "yt_flac_filter"]:
+            video_id = cached_data.get('video_id')
+    
+            # Verify cached data exists and is valid
+            if not video_id:
+                await callback_query.answer("⚠ Invalid callback data", show_alert=True)
+                return
+            
+            info = get_video_info_from_cache(video_id)
+            if not info:
+                await callback_query.answer("⚠ Video information not available", show_alert=True)
+                return
+            
+            # Specific FLAC format handling
+            format_id = "flac"
+            
+            await start_download(
+                client, 
+                callback_query, 
+                message, 
+                video_id, 
+                "flac", 
+                info, 
+                "flac"
+            )
         elif callback_type == "ytdl":
             # Check if user already has an active download
             if user_id in active_downloads and active_downloads[user_id]['expiry'] > time.time():
@@ -421,18 +472,21 @@ async def start_download(client : Client, callback_query, message, video_id, for
         'last_update': time.time(),
         'stalled_since': None
     }
-    
-    # Format info
-    format_info = ""
-    if selected_format.get('height'):
-        format_info = f"{selected_format.get('height', '')}p"
-    else:
-        format_info = "Audio"
-    
-    if selected_format.get('fps'):
-        format_info += f" {selected_format.get('fps')}fps"
-    
-    format_info += f" {selected_format.get('ext', '')}"
+
+    if selected_format != "flac" and selected_format != "best_video" :  
+        # Format info
+        format_info = ""
+        if selected_format.get('height'):
+            format_info = f"{selected_format.get('height', '')}p"
+        else:
+            format_info = "Audio"
+        
+        if selected_format.get('fps'):
+            format_info += f" {selected_format.get('fps')}fps"
+        
+        format_info += f" {selected_format.get('ext', '')}"
+    else :
+        format_info = format_id
     
     # Update message to show download status with cancel button
     cancel_markup = InlineKeyboardMarkup([
@@ -449,8 +503,11 @@ async def start_download(client : Client, callback_query, message, video_id, for
     # Set up progress tracking
     start_time = time.time()
     last_update_time = start_time
-    file_size = selected_format.get('filesize', selected_format.get('filesize_approx', 0))
-    
+    if selected_format != "flac" and selected_format != "best_video" :  
+        file_size = selected_format.get('filesize', selected_format.get('filesize_approx', 0))
+    else :
+        file_size = "N/A"
+
     async def progress_hook(d):
         nonlocal last_update_time
         current_time = time.time()
@@ -521,10 +578,21 @@ async def start_download(client : Client, callback_query, message, video_id, for
         # Download the video with retries
         for attempt in range(MAX_RETRIES):
             try:
-                download_task = asyncio.create_task(
-                    download_youtube_video(video_id, format_id, progress_hook)
-                )
-                
+                if selected_format == "flac":
+                    download_task = asyncio.create_task(
+                        download_youtube_video(video_id, format_id, progress_hook,bestflac = True) # get best audio format
+                    )
+                elif selected_format == "ytbest":
+                    download_task = asyncio.create_task(
+                        download_youtube_video(video_id, format_id, progress_hook,bestVideo=True)
+                    )
+                else:
+                    download_task = asyncio.create_task(
+                        download_youtube_video(video_id, format_id, progress_hook)
+                    )
+                    
+
+                    
                 result = await download_task
                 
                 # If successful, break the retry loop
@@ -565,8 +633,11 @@ async def start_download(client : Client, callback_query, message, video_id, for
         
         # Upload the file to Telegram
         file_path = result['file_path']
-        title = f"{result['title'][:20]}..."
+        title = f"{result['title'][:40]}."
         ext = result['ext']
+        performer = result['performer']
+        # thumbnail = result['thumbnail']
+        duration = result['duration']
 
         
         # Determine if it's audio or video based on extension
@@ -579,6 +650,8 @@ async def start_download(client : Client, callback_query, message, video_id, for
                 await client.send_audio(
                     chat_id=message.chat.id,
                     audio=file_path,
+                    performer = performer,
+                    duration = duration,
                     caption=f"≡ __{title}__\n\n__Via__ @{(await client.get_me()).username}",
                     file_name=f"{title}.{ext}",
                     reply_to_message_id=callback_query.message.reply_to_message.id if callback_query.message.reply_to_message else None
@@ -591,7 +664,6 @@ async def start_download(client : Client, callback_query, message, video_id, for
                     file_name=f"{title}.{ext}",
                     reply_to_message_id=callback_query.message.reply_to_message.id if callback_query.message.reply_to_message else None
                 )
-            
         except Exception as e:
             error_trace = traceback.format_exc()
             logger.error(f"Failed to upload file: {e}\n{error_trace}")
