@@ -279,6 +279,7 @@ async def search_youtube(
         'socket_timeout': timeout,
         'ignoreerrors': True,
         'skip_download': True,
+        "cache-dir": "/tmp/",
         'writeinfojson': False,
         'playlist_items': f'1-{max_results}',
         'user_agent': user_agent,
@@ -423,6 +424,7 @@ async def fetch_youtube_info(video_id: str) -> Optional[Dict[str, Any]]:
         'no_warnings': True,
         'noplaylist': True,
         'socket_timeout': 30,
+        "cache-dir": "/tmp/",
         'extract_flat': False,  # Changed to get full info
         'ignoreerrors': True,
         'user_agent': user_agent,
@@ -506,6 +508,7 @@ async def fetch_youtube_info(video_id: str) -> Optional[Dict[str, Any]]:
         'thumbnail': info.get('thumbnail', None),
         'uploader': info.get('uploader', 'Unknown'),
         'view_count': info.get('view_count', 0),
+        "cache-dir": "/tmp/",
         'upload_date': format_upload_date(info.get('upload_date', '')),
         'description': info.get('description', ''),
         'formats': formats,
@@ -592,6 +595,7 @@ async def download_youtube_video(
             "prefer_ffmpeg": False,
             "geo_bypass": True,
             'quiet': True,
+            "cache-dir": "/tmp/",
             'no_warnings': True,
             'outtmpl': output_template,
             'socket_timeout': 30,
@@ -602,22 +606,18 @@ async def download_youtube_video(
         }
     elif bestVideo:
         ydl_opts = {
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',  # Best video + best audio, fallback to best available
+            'format': "best[ext=mp4]",  # Best video + best audio, fallback to best available
             "nocheckcertificate": True,
             "addmetadata": True,
-            "prefer_ffmpeg": True,  # Ensure ffmpeg is used for merging
-            "merge_output_format": "mp4",  # Ensure the final output is in a proper format
             "geo_bypass": True,
             'quiet': True,
+            "cache-dir": "/tmp/",
             'no_warnings': True,
             'outtmpl': output_template,
             'socket_timeout': 30,
             'retries': 5,
             'fragment_retries': 5,
             'user_agent': user_agent,
-             "postprocessors": [
-            {'key': 'FFmpegMerger', 'preferedformat': 'mp4'}  # Merges streams properly
-        ]
         }
 
 
@@ -628,6 +628,7 @@ async def download_youtube_video(
             "addmetadata": True,
             "geo_bypass": True,
             'quiet': True,
+            "cache-dir": "/tmp/",
             'no_warnings': True,
             'outtmpl': output_template,
             'socket_timeout': 30,
@@ -773,6 +774,7 @@ async def download_youtube_video(
         return {
             'success': True,
             'id':info.get('id'),
+            'url':info.get('webpage_url'),
             'file_path': file_path,
             'title': info.get('title', 'Unknown Title'),
             'performer': info.get('uploader', 'Unknown Channel'),

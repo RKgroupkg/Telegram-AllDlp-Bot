@@ -36,7 +36,7 @@ download_queue = {}
 
 # Constants
 PROGRESS_UPDATE_INTERVAL = 3  # seconds
-MAX_RETRIES = 3
+MAX_RETRIES = 2
 STALLED_DOWNLOAD_TIMEOUT = 300  # 5 minutes
 
 async def handle_youtube_link(client: Client, message: Message) -> None:
@@ -474,21 +474,19 @@ async def start_download(client : Client, callback_query, message, video_id, for
         'stalled_since': None
     }
 
-    if selected_format != "flac" and selected_format != "best_video" :  
-        # Format info
-        format_info = ""
-        if selected_format.get('height'):
-            format_info = f"{selected_format.get('height', '')}p"
-        else:
-            format_info = "Audio"
+    if isinstance(selected_format, dict): # If its a dic which implys that its not flac or bestvideo
+        # Build the format info string
+        height = selected_format.get('height')
+        fps = selected_format.get('fps')
+        ext = selected_format.get('ext', '')
         
-        if selected_format.get('fps'):
-            format_info += f" {selected_format.get('fps')}fps"
+        base_info = f"{height}p" if height else "Audio"
+        fps_info = f" {fps}fps" if fps else ""
         
-        format_info += f" {selected_format.get('ext', '')}"
-    else :
+        format_info = f"{base_info}{fps_info} {ext}".strip()
+    else:
         format_info = format_id
-    
+
     # Update message to show download status with cancel button
     cancel_markup = InlineKeyboardMarkup([
         [InlineKeyboardButton("✖  Cancel Download", callback_data=f"ytcancel_{user_id}")]
@@ -504,10 +502,12 @@ async def start_download(client : Client, callback_query, message, video_id, for
     # Set up progress tracking
     start_time = time.time()
     last_update_time = start_time
-    if selected_format != "flac" and selected_format != "best_video" :  
-        file_size = selected_format.get('filesize', selected_format.get('filesize_approx', 0))
-    else :
+    # Check if the selected format is NOT "flac" or "best_video"
+    if isinstance(selected_format, dict):
+        file_size = selected_format.get("filesize", selected_format.get("filesize_approx", 0))
+    else:
         file_size = "N/A"
+
 
     async def progress_hook(d):
         nonlocal last_update_time
@@ -579,17 +579,15 @@ async def start_download(client : Client, callback_query, message, video_id, for
         # Download the video with retries
         for attempt in range(MAX_RETRIES):
             try:
+                options = {}
+
                 if selected_format == "flac":
-                    download_task = asyncio.create_task(
-                        download_youtube_video(video_id, format_id, progress_hook,bestflac = True) # get best audio format
-                    )
-                elif selected_format == "ytbest":
-                    download_task = asyncio.create_task(
-                        download_youtube_video(video_id, format_id, progress_hook,bestVideo=True)
-                    )
-                else:
-                    download_task = asyncio.create_task(
-                        download_youtube_video(video_id, format_id, progress_hook)
+                    options["bestflac"] = True  # Get best audio format
+                if selected_format == "ytbest":
+                    options["bestVideo"] = True  # Get best video format
+                
+                download_task = asyncio.create_task(
+                        download_youtube_video(video_id, format_id, progress_hook,**options) # passdown extra formats
                     )
                     
 
@@ -641,26 +639,29 @@ async def start_download(client : Client, callback_query, message, video_id, for
         Thumbpath= f"/tmp/thumbnails/{videoId}.jpg"
         thumbnail = f"https://img.youtube.com/vi/{videoId}/default.jpg"
         duration = result['duration']
+        filesize = result['filesize']
+        Url = result['url']
 
         
         # Determine if it's audio or video based on extension
         is_audio = ext in ['mp3', 'm4a', 'aac', 'flac', 'opus', 'ogg']
         
-        await message.edit_text(f"↥ Uploading __{title}__...")
+        await message.edit_text(f"↥ Uploading __[{format_size(int(filesize))}]__  __{title}__...")
         
         try:
+            # Extract the directory path from the file path
+            directory = os.path.dirname(Thumbpath)
+
+            # Check if the directory exists; if not, create it
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+
+            with open(Thumbpath,"wb") as file:
+                file.write(get(thumbnail).content) # get the thumbnail
+
+
             if is_audio:
-                # Extract the directory path from the file path
-                directory = os.path.dirname(Thumbpath)
-
-                # Check if the directory exists; if not, create it
-                if not os.path.exists(directory):
-                    os.makedirs(directory)
-
-                with open(Thumbpath,"wb") as file:
-                    file.write(get(thumbnail).content) # get the thumbnail
-
-
+        
                 await client.send_audio(
                     chat_id=message.chat.id,
                     audio=file_path,
@@ -671,25 +672,29 @@ async def start_download(client : Client, callback_query, message, video_id, for
                     file_name=f"{title}.{ext}",
                     reply_to_message_id=callback_query.message.reply_to_message.id if callback_query.message.reply_to_message else None
                 )
-                clean_temporary_file(Thumbpath) # Delete the thumbnail
-
+                
             else:
                 await client.send_video(
                     chat_id=message.chat.id,
+                    thumb = Thumbpath,
                     video=file_path,
                     caption=f"≡ __{title}__\n\n__via__ @{(await client.get_me()).username}",
                     file_name=f"{title}.{ext}",
-                    reply_to_message_id=callback_query.message.reply_to_message.id if callback_query.message.reply_to_message else None
+                    reply_to_message_id=callback_query.message.reply_to_message.id if callback_query.message.reply_to_message else None,
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("♙ Open Youtube ♙", url=Url)]])
                 )
         except Exception as e:
             error_trace = traceback.format_exc()
             logger.error(f"Failed to upload file: {e}\n{error_trace}")
             await message.edit_text(f"✖  Failed to upload file: {str(e)}")
+            
         finally:
             # Clean up downloaded file and active download status
             try:
                 if os.path.exists(file_path):
-                    clean_temporary_file(file_path)
+                    clean_temporary_file(file_path) # Delete the Media
+                if os.path.exists(Thumbpath):
+                    clean_temporary_file(Thumbpath) # Delete the thumbnail
             except Exception as e:
                 logger.error(f"Error cleaning up temporary file: {e}")
             
