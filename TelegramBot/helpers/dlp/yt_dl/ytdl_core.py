@@ -772,6 +772,7 @@ async def download_youtube_video(
     if os.path.exists(file_path):
         return {
             'success': True,
+            'id':info.get('id'),
             'file_path': file_path,
             'title': info.get('title', 'Unknown Title'),
             'performer': info.get('uploader', 'Unknown Channel'),

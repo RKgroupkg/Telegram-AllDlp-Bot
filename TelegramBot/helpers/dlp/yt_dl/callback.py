@@ -3,6 +3,7 @@ import time
 import asyncio
 from datetime import timedelta
 import traceback
+from requests import get
 
 from pyrogram import Client
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -636,7 +637,9 @@ async def start_download(client : Client, callback_query, message, video_id, for
         title = f"{result['title'][:40]}."
         ext = result['ext']
         performer = result['performer']
-        # thumbnail = result['thumbnail']
+        videoId = result['id']
+        Thumbpath= f"/tmp/thumbnails/{videoId}.jpg"
+        thumbnail = f"https://img.youtube.com/vi/{videoId}/default.jpg"
         duration = result['duration']
 
         
@@ -647,15 +650,29 @@ async def start_download(client : Client, callback_query, message, video_id, for
         
         try:
             if is_audio:
+                # Extract the directory path from the file path
+                directory = os.path.dirname(Thumbpath)
+
+                # Check if the directory exists; if not, create it
+                if not os.path.exists(directory):
+                    os.makedirs(directory)
+
+                with open(Thumbpath,"wb") as file:
+                    file.write(get(thumbnail).content) # get the thumbnail
+
+
                 await client.send_audio(
                     chat_id=message.chat.id,
                     audio=file_path,
                     performer = performer,
                     duration = duration,
+                    thumb = Thumbpath,
                     caption=f"≡ __{title}__\n\n__Via__ @{(await client.get_me()).username}",
                     file_name=f"{title}.{ext}",
                     reply_to_message_id=callback_query.message.reply_to_message.id if callback_query.message.reply_to_message else None
                 )
+                clean_temporary_file(Thumbpath) # Delete the thumbnail
+
             else:
                 await client.send_video(
                     chat_id=message.chat.id,
