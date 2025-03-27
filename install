@@ -1,0 +1,120 @@
+#!/bin/bash
+
+# Color codes for better readability
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Function to check and install pip
+install_pip() {
+    echo -e "${YELLOW}Checking for pip...${NC}"
+    
+    # Check if pip is installed
+    if command -v pip3 &> /dev/null; then
+        echo -e "${GREEN}Pip is already installed.${NC}"
+        return 0
+    fi
+
+    echo -e "${YELLOW}Installing pip...${NC}"
+    
+    # Determine the package manager and install pip
+    if command -v apt-get &> /dev/null; then
+        sudo apt-get update
+        sudo apt-get install -y python3-pip
+    elif command -v yum &> /dev/null; then
+        sudo yum install -y python3-pip
+    elif command -v brew &> /dev/null; then
+        brew install python
+    else
+        echo -e "${RED}Unsupported package manager. Please install pip manually.${NC}"
+        return 1
+    fi
+
+    # Verify pip installation
+    if command -v pip3 &> /dev/null; then
+        echo -e "${GREEN}Pip installed successfully.${NC}"
+        return 0
+    else
+        echo -e "${RED}Failed to install pip.${NC}"
+        return 1
+    fi
+}
+
+# Function to install requirements
+install_requirements() {
+    echo -e "${YELLOW}Installing requirements...${NC}"
+    
+    # Check if requirements.txt exists
+    if [ ! -f "requirements.txt" ]; then
+        echo -e "${RED}requirements.txt not found in the current directory.${NC}"
+        return 1
+    fi
+
+    # Install requirements
+    pip3 install -r requirements.txt
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}Requirements installed successfully.${NC}"
+        return 0
+    else
+        echo -e "${RED}Failed to install requirements.${NC}"
+        return 1
+    fi
+}
+
+# Function to install FFmpeg and FFprobe
+install_ffmpeg() {
+    echo -e "${YELLOW}Installing FFmpeg...${NC}"
+    
+    # Detect package manager and install FFmpeg
+    if command -v apt-get &> /dev/null; then
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
+    elif command -v yum &> /dev/null; then
+        sudo yum install -y ffmpeg
+    elif command -v brew &> /dev/null; then
+        brew install ffmpeg
+    else
+        echo -e "${RED}Unsupported package manager. Please install FFmpeg manually.${NC}"
+        return 1
+    fi
+
+    # Verify FFmpeg installation
+    if command -v ffmpeg &> /dev/null && command -v ffprobe &> /dev/null; then
+        echo -e "${GREEN}FFmpeg and FFprobe installed successfully.${NC}"
+        ffmpeg -version
+        return 0
+    else
+        echo -e "${RED}Failed to install FFmpeg.${NC}"
+        return 1
+    fi
+}
+
+# Main installation process
+main() {
+    echo -e "${YELLOW}Starting installation process...${NC}"
+
+    # Install pip
+    install_pip || { 
+        echo -e "${RED}Pip installation failed. Exiting.${NC}"; 
+        exit 1; 
+    }
+
+    # Install requirements
+    install_requirements || {
+        echo -e "${RED}Requirements installation failed. Exiting.${NC}";
+        exit 1;
+    }
+
+    # Install FFmpeg
+    install_ffmpeg || {
+        echo -e "${RED}FFmpeg installation failed. Exiting.${NC}";
+        exit 1;
+    }
+
+    echo -e "${GREEN}Installation completed successfully!${NC}"
+}
+
+# Run the main function
+main
