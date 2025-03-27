@@ -3,6 +3,10 @@ import time
 import random
 import asyncio
 import logging
+
+import shutil
+import tempfile
+
 import yt_dlp
 import threading
 from datetime import timedelta
@@ -24,6 +28,8 @@ from TelegramBot.config import(
 # Ensure download directory exists
 os.makedirs(YT_DOWNLOAD_PATH, exist_ok=True)
 os.makedirs(DEFAULT_COOKIES_DIR, exist_ok=True)
+
+
 
 
 # Utils
@@ -97,7 +103,34 @@ class CookieManager:
         self._lock = asyncio.Lock()
         self.refresh_cookies_list()
         self._initialized = True
-        
+    
+    def fix_cookie_file(self, input_file, output_file):
+        """Fix cookie file by ensuring tab separation in cookie entries."""
+        for line in input_file:
+            stripped = line.lstrip()
+            if stripped == "" or stripped.startswith("#"):
+                # Preserve empty lines and comments
+                output_file.write(line)
+            else:
+                # Check if already correctly formatted with tabs
+                tab_parts = line.split("\t")
+                if len(tab_parts) == 7:
+                    # Already fixed, write as is
+                    output_file.write(line)
+                else:
+                    # Split by whitespace and reconstruct if possible
+                    space_parts = line.split()
+                    if len(space_parts) >= 6:
+                        # Take first 6 fields, rest is value
+                        domain, flag, path, secure, expiration, name = space_parts[:6]
+                        value = " ".join(space_parts[6:]) if len(space_parts) > 6 else ""
+                        new_line = "\t".join([domain, flag, path, secure, expiration, name, value]) + "\n"
+                        output_file.write(new_line)
+                    else:
+                        # Invalid line, preserve and warn
+                        output_file.write(line)
+                        logger.error(f"Warning: invalid line in {input_file.name}: {line.strip()}")
+
     def refresh_cookies_list(self):
         """Refresh the list of available cookie files"""
         self.cookies_files = []
@@ -105,6 +138,15 @@ class CookieManager:
             for file in os.listdir(self.cookies_dir):
                 if file.endswith('.txt'):
                     cookie_path = os.path.join(self.cookies_dir, file)
+                    
+    
+                    with open(cookie_path, 'r', encoding='utf-8') as input_file:
+                        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False) as temp_file:
+                            self.fix_cookie_file(input_file, temp_file)
+                        temp_filename = temp_file.name
+                    shutil.move(temp_filename, cookie_path)
+                    logger.info(f"Processed {cookie_path}")
+                    
                     # Verify the file is readable and not empty
                     if os.path.getsize(cookie_path) > 0:
                         self.cookies_files.append(cookie_path)
@@ -586,57 +628,37 @@ async def download_youtube_video(
     
     # Common user agent to avoid 403 errors
     user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    # Common options
-    if bestflac:
-        ydl_opts = {
-            'format': "bestaudio",
-            "nocheckcertificate": True,
-            "addmetadata": True,
-            "prefer_ffmpeg": False,
-            "geo_bypass": True,
-            'quiet': True,
-            "cache-dir": "/tmp/",
-            'no_warnings': True,
-            'outtmpl': output_template,
-            'socket_timeout': 30,
-            'retries': 5,
-            'fragment_retries': 5,
-            'user_agent': user_agent,
-            "postprocessors": [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'flac', 'preferredquality': '693'}]
-        }
-    elif bestVideo:
-        ydl_opts = {
-            'format': "best[ext=mp4]",  # Best video + best audio, fallback to best available
-            "nocheckcertificate": True,
-            "addmetadata": True,
-            "geo_bypass": True,
-            'quiet': True,
-            "cache-dir": "/tmp/",
-            'no_warnings': True,
-            'outtmpl': output_template,
-            'socket_timeout': 30,
-            'retries': 5,
-            'fragment_retries': 5,
-            'user_agent': user_agent,
-        }
-
-
-    else:
-        ydl_opts = {
-            'format': format_id,
-            "nocheckcertificate": True,
-            "addmetadata": True,
-            "geo_bypass": True,
-            'quiet': True,
-            "cache-dir": "/tmp/",
-            'no_warnings': True,
-            'outtmpl': output_template,
-            'socket_timeout': 30,
-            'retries': 5,
-            'fragment_retries': 5,
-            'user_agent': user_agent,
-        }
     
+    common_opts = {
+        "nocheckcertificate": True,
+        "addmetadata": True,
+        "geo_bypass": True,
+        'quiet': True,
+        "cache-dir": "/tmp/",
+        'no_warnings': True,
+        'outtmpl': output_template,
+        'socket_timeout': 30,
+        'retries': 2,
+        'fragment_retries': 5,
+        'user_agent': user_agent,
+    }
+    
+    # Start with the common options
+    ydl_opts = common_opts.copy()
+
+    if bestflac:
+        # Specific options for bestflac
+        ydl_opts['format'] = "bestaudio"
+        ydl_opts["prefer_ffmpeg"] = False
+        ydl_opts["postprocessors"] = [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'flac', 'preferredquality': '693'}]
+    elif bestVideo:
+        # Specific options for bestVideo
+        ydl_opts['format'] ='bestvideo+bestaudio/best[ext=mp4]/best'
+    else:
+        # Default case
+        ydl_opts['format'] = format_id
+
+
     # Add cookie file if available
     if cookie_file:
         ydl_opts['cookiefile'] = cookie_file

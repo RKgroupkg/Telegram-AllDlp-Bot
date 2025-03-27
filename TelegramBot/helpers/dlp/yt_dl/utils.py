@@ -197,7 +197,7 @@ def generate_format_buttons(formats: List[Dict[str, Any]], page: int = 0, items_
             ),
             InlineKeyboardButton(
                 text="♛ Best Video",
-                callback_data=f"ytbest_{best_callback_id}"  # Use consistent prefix
+                callback_data=f"ytbestVideo_{best_callback_id}"  # Use consistent prefix
             )
         ]
         buttons.append(filter_buttons)

@@ -133,7 +133,8 @@ async def handle_youtube_link(client: Client, message: Message) -> None:
             f"≡ __{info['title'][:30]}...__\n\n"
             f"𓇳 Uploader: __{info['uploader']}__\n"
             f"⦿ Duration: __{duration_str}__\n"
-            f"⌘ Views: __{beautify_views(int(info.get('view_count', 'N/A')))}__\n\n"
+            f"⌘ Views: __{beautify_views(int(info.get('view_count', 'N/A')))}__\n"
+            f"[​]({info.get('thumbnail')})\n"
             f"Please select a format to download:",
             reply_markup=markup
         )
@@ -233,7 +234,8 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
                 f"♔ *Title*: __{info['title'][:30]}...__\n"
                 f"✿ *Duration*: __{duration_str}__\n"
                 f"♚ *Uploader*: __{info['uploader']}__\n"
-                f"✦ *Views*: __{beautify_views(int(info.get('view_count', 'N/A')))}__\n"
+                f"✦ *Views*: __{beautify_views(int(info.get('view_count', 'N/A')))}__"
+                f"[​]({info.get('thumbnail')})\n"
                 f"۞ *Upload Date*: __{info.get('upload_date', 'N/A')}__"
             )
             await callback_query.answer(info_text, show_alert=True)
@@ -288,7 +290,7 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
             await callback_query.answer(f"Page {page+1}")
             return
         
-        elif callback_type in ["ytbest", "yt_best"]:
+        elif callback_type in ["ytbestVideo", "yt_best"]:
             video_id = cached_data.get('video_id')
     
             # Verify cached data exists and is valid
@@ -302,7 +304,7 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
                 return
             
             # Specific FLAC format handling
-            format_id = "best_video"
+            format_id = "bestVideo"
             
             await start_download(
                 client, 
@@ -356,6 +358,7 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
                 except MessageNotModified:
                     pass
                 return
+
             
             video_id = cached_data.get('video_id')
             format_id = cached_data.get('format_id')
@@ -388,7 +391,8 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
                 await message.edit_text(
                     f"⚠ Warning: This file is large ({size_mb:.1f}MB).\n\n"
                     f"♔ Title: {info['title']}\n"
-                    f"✤ Format: {selected_format.get('height', 'Audio')}p {selected_format.get('ext', '')}\n\n"
+                    f"✤ Format: {selected_format.get('height', 'Audio')}p {selected_format.get('ext', '')}\n"
+                    f"[​]({info.get('thumbnail')})\n"
                     f"Do you want to proceed with the download?",
                     reply_markup=confirm_markup
                 )
@@ -474,7 +478,7 @@ async def start_download(client : Client, callback_query, message, video_id, for
         'stalled_since': None
     }
 
-    if isinstance(selected_format, dict): # If its a dic which implys that its not flac or bestvideo
+    if isinstance(selected_format, dict): # If its a dic which implys that its not flac or ytbestVideo
         # Build the format info string
         height = selected_format.get('height')
         fps = selected_format.get('fps')
@@ -494,7 +498,8 @@ async def start_download(client : Client, callback_query, message, video_id, for
     
     await message.edit_text(
         f"⟳ Preparing to download: **{info['title']}**\n\n"
-        f"✤ Format: {format_info}\n"
+        f"✤ Format: {format_info}"
+        f"[​]({info.get('thumbnail')})\n"
         f"Status: Initializing...",
         reply_markup=cancel_markup
     )
@@ -502,7 +507,7 @@ async def start_download(client : Client, callback_query, message, video_id, for
     # Set up progress tracking
     start_time = time.time()
     last_update_time = start_time
-    # Check if the selected format is NOT "flac" or "best_video"
+    # Check if the selected format is NOT "flac" or "ytbestVideo"
     if isinstance(selected_format, dict):
         file_size = selected_format.get("filesize", selected_format.get("filesize_approx", 0))
     else:
@@ -580,10 +585,9 @@ async def start_download(client : Client, callback_query, message, video_id, for
         for attempt in range(MAX_RETRIES):
             try:
                 options = {}
-
                 if selected_format == "flac":
                     options["bestflac"] = True  # Get best audio format
-                if selected_format == "ytbest":
+                if selected_format == "bestVideo":
                     options["bestVideo"] = True  # Get best video format
                 
                 download_task = asyncio.create_task(
@@ -646,7 +650,7 @@ async def start_download(client : Client, callback_query, message, video_id, for
         # Determine if it's audio or video based on extension
         is_audio = ext in ['mp3', 'm4a', 'aac', 'flac', 'opus', 'ogg']
         
-        await message.edit_text(f"↥ Uploading __[{format_size(int(filesize))}]__  __{title}__...")
+        await message.edit_text(f"↥ Uploading __[{format_size(int(filesize))}]__\n\n  __{title}__...")
         
         try:
             # Extract the directory path from the file path

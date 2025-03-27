@@ -34,7 +34,7 @@ logger = LOGGER(__name__)
 # Store search results temporarily 
 MUSIC_SEARCH_CACHE = {}
 
-def truncate_text(text: str, max_length: int = 25) -> str:
+def truncate_text(text: str, max_length: int = 40) -> str:
     """
     Truncate text to a specified max length with ellipsis
     """
@@ -73,7 +73,7 @@ async def music_search(_, message: Message):
         query = query[1]
         logger.info(f"Music search initiated by {message.from_user.id}: {query}")
         msg = await message.reply_text(
-            f"⌕ <b>Searching</b> <i>{query[:10]}..</i>",
+            f"⌕ <b>Searching</b> <i>{query[:50]}..</i>",
             quote = True,
             parse_mode = ParseMode.HTML 
         )
@@ -293,7 +293,8 @@ async def music_select_handler(_, query: CallbackQuery):
                 f"≡ __{info['title'][:30]}...__\n\n"
                 f"𓇳 Uploader: __{info['uploader']}__\n"
                 f"⦿ Duration: __{duration_str}__\n"
-                f"⌘ Views: __{info.get('view_count', 'N/A')}__\n\n"
+                f"⌘ Views: __{info.get('view_count', 'N/A')}__\n"
+                f"[​]({info.get('thumbnail')})\n"
                 f"Please select a format to download:",
                 reply_markup=format_markup
             )
