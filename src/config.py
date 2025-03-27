@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Optional
 from os import getenv
 from pathlib import Path
 from dotenv import load_dotenv
@@ -127,3 +128,15 @@ if not OWNER_USERID:
 
 if not MONGO_URI:
     logger.warning("MONGO_URI not specified, some features may be unavailable")
+
+def process_cookie_urls(env_value: Optional[str]) -> list[str]:
+    """Parse COOKIES_URL environment variable"""
+    if not env_value:
+        return []
+    urls = []
+    for part in env_value.split(','):
+        urls.extend(part.split())
+
+    return [url.strip() for url in urls if url.strip()]
+
+COOKIES_URL: list[str] = process_cookie_urls(getenv("COOKIES_URL"))
