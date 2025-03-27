@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Quick DL Bot</title>
+    <title>Quick DL Bot - Advanced Multimedia Download Solution</title>
 </head>
 <body>
 <h1 align="center">♚ Quick DL Bot ♚</h1>
@@ -13,89 +13,140 @@
 
 <h2>♜ Project Overview</h2>
 
-Quick DL Bot is a powerful Telegram bot designed for seamless multimedia downloading across multiple platforms. With support for Instagram, Spotify, and YouTube, this bot provides a modern, user-friendly experience for content retrieval.
+Quick DL Bot is an advanced, multi-platform Telegram bot designed to provide seamless multimedia downloading capabilities. Engineered with robust architecture and cutting-edge technologies, this bot offers a sophisticated solution for content retrieval across various platforms.
 
-<h2>♢ Key Features</h2>
+<h2>♢ Advanced Technical Features</h2>
 
-- 🔹 Multi-Platform Support
-  - YouTube video/audio downloads
-  - Spotify track downloads
-  - Instagram media retrieval
+### ○ Intelligent Download Mechanisms
+- **Platform-Agnostic Download Engine**
+  - Comprehensive support for YouTube, Spotify, and Instagram
+  - Intelligent content retrieval across multiple media types
+  - Advanced format and quality selection
 
-- 🔹 Advanced Technologies
-  - Built using Pyrogram with smart plugin system
-  - Integrated rate limiting
-  - Uses yt_dlp for robust downloading
-  - Rapid API for Instagram downloads
-  - FLAC and FFmpeg support
+### ○ Performance Optimization Technologies
+- **API and Cookie Management**
+  - **Cookie Rotator**: Implements dynamic cookie rotation to prevent rate limiting
+    - Automatic cookie refresh mechanism
+    - Seamless fallback between multiple cookie sources
+  - **API Rotator**: Intelligent API endpoint management
+    - Multiple API key support
+    - Automatic failover between different API endpoints
+    - Rate limit evasion strategies
 
-<h2>○ Supported Commands</h2>
+- **Cookie Parser**
+  - Advanced cookie parsing and validation
+  - Fixes complex indentation issues
+  - Normalizes cookie formats across different platforms
+  - Handles special characters and encoding challenges
 
-<details>
-<summary><strong>Downloading Commands</strong></summary>
+### ○ Technical Architecture
+- **Framework**: Pyrogram Smart Plugin System
+- **Download Backbone**: yt_dlp with extended capabilities
+- **Supported Formats**: 
+  - Audio: FLAC, MP3, WAV
+  - Video: MP4, WebM, MKV
+- **Media Processing**: FFmpeg integration for advanced transcoding
 
-```
-/yt     - Download YouTube videos, shorts, music
-/spotify - Download Spotify tracks
-/insta   - Download Instagram reels, videos, stories, images
-```
-</details>
+<h2>🔧 Technical Specifications</h2>
 
-<details>
-<summary><strong>Utility Commands</strong></summary>
+### System Requirements
+- **Python Version**: {__python_version__}
+- **Bot Version**: {__version__}
+- **Pyrogram Version**: {__pyro_version__}
+- **License**: MIT
 
-```
-/start   - Bot introduction
-/help    - Display command help
-/alive   - Check bot status
-/ping    - Alias for alive check
-/paste   - Text sharing via katb.in
-```
-</details>
+### Performance Characteristics
+- **Rate Limiting**: Intelligent request throttling
+- **Concurrency**: Asynchronous download management
+- **Error Handling**: Robust error detection and recovery
 
-<h2>♚ Hosting Guide</h2>
+<h2>○ Comprehensive Command Set</h2>
 
-1. Installation
-```bash
-# Install necessary dependencies
-bash install.sh
-```
+### Downloading Commands
+- **YouTube Downloads** (`/yt`)
+  - Supports various content types
+  - Flexible quality and format selection
+  - Direct link and inline mode support
 
-2. Configuration
-```bash
-# Edit configuration file
-nano config.env
+- **Spotify Downloads** (`/spotify`)
+  - Track and playlist downloading
+  - YouTube alternative matching
+  - High-quality audio preservation
 
-# Add:
-- Cookies
-- Rapid API credentials
-- Other necessary configurations
-```
+- **Instagram Downloads** (`/insta`)
+  - Reels, videos, stories, images
+  - Public content retrieval
+  - Inline and direct link support
 
-3. Start the Bot
-```bash
-# Launch the bot
-bash start
-```
+### Utility Commands
+- **Bot Management**
+  - `/start`: Bot introduction
+  - `/help`: Command assistance
+  - `/alive`: Status check
+  - `/ping`: Connectivity verification
 
-<h2>🖥️ System Requirements</h2>
+### Administrative Commands
+- **System Interaction**
+  - `/speedtest`: Server network performance
+  - `/serverstats`: Comprehensive server metrics
+  - `/dbstats`: Database performance insights
+  - `/log`: Diagnostic log retrieval
 
-- Python: {__python_version__}
-- Bot Version: {__version__}
-- Pyrogram Version: {__pyro_version__}
+### Developer Commands
+- **Advanced Operations**
+  - `/update`: Repository synchronization
+  - `/restart`: Bot restart mechanism
+  - `/shell`: Remote terminal access
+  - `/py`: Python command execution
+  - `/broadcast`: User communication
 
-<h2>📜 License</h2>
+<h2>🚀 Deployment Guide</h2>
 
-<p>This project is licensed under the MIT License.</p>
+### Prerequisites
+- Linux-based environment (recommended)
+- Python 3.8+
+- Telegram API credentials
+- Rapid API access
+
+### Installation Steps
+1. **Dependency Installation**
+   ```bash
+   # Clone the repository
+   git clone https://github.com/your-repo/quick-dl-bot.git
+   
+   # Navigate to project directory
+   cd quick-dl-bot
+   
+   # Install dependencies
+   bash install.sh
+   ```
+
+2. **Configuration**
+   ```bash
+   # Edit configuration file
+   nano config.env
+   
+   # Configure:
+   # - Telegram Bot Token
+   # - API Credentials
+   # - Cookie Settings
+   # - Rapid API Keys
+   ```
+
+3. **Launch**
+   ```bash
+   # Start the bot
+   bash start
+   ```
 
 <h2>🤝 Contributing</h2>
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+We welcome contributions! Please review our contribution guidelines and submit pull requests for improvements.
 
 <hr>
 
 <p align="center">
-    <strong>Crafted with ♥ by RK Group</strong>
+    <strong>Engineered with Precision by RK Group</strong>
 </p>
 </body>
 </html>
