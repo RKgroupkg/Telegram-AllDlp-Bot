@@ -17,3 +17,4 @@ pillow
 spotipy
 ffmpeg
 yt_dlp
+aiohttp
