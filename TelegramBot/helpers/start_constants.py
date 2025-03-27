@@ -50,6 +50,8 @@ SUDO_TEXT = """
 
 • /clean_ytcache: Clears the catch.
 
+• /catch: clear the catch and useless file (Its automatic also)
+
 • /ytstats: shows Yt stats
 """
 

@@ -10,6 +10,6 @@ async def log(_, message: Message):
     """upload the logs file of the bot."""
 
     try:
-        return await message.reply_document("logs.txt", caption="logs.txt", quote=True)
+        return await message.reply_document("logs.txt", caption="♚ logs.txt", quote=True)
     except Exception as error:
         return await message.reply_text(error, quote=True)

@@ -13,7 +13,7 @@ from TelegramBot.helpers.pasting_services import katbin_paste
 async def paste(_, message: Message):
     """Pastes given text on the Katb.in website."""
 
-    paste_usage = "**Usage:** Paste the text on the katb.in website. Reply to a text file, \
+    paste_usage = "♚ **Usage:** Paste the text on the katb.in website. Reply to a text file, \
     text message or just type the text after command.\n\n**Example:** /paste type your text"
 
     paste_reply = await message.reply_text("pasting...", quote=True)

@@ -24,15 +24,15 @@ def speedtestcli():
 async def speedtest(_, message: Message):
     """Give speedtest of the server where bot is running."""
 
-    speed = await message.reply("Running speedtest....", quote=True)
+    speed = await message.reply("♢ Running speedtest....", quote=True)
     LOGGER(__name__).info("Running speedtest....")
     result = await speedtestcli()
 
     speed_string = f"""
-Upload: {get_readable_bytes(result["upload"] / 8)}/s
-Download: {get_readable_bytes(result["download"] / 8)}/s
-Ping: {result["ping"]} ms
-ISP: {result["client"]["isp"]}
+♚ **Upload:** __{get_readable_bytes(result["upload"] / 8)}/s__
+♜ **Download**: __{get_readable_bytes(result["download"] / 8)}/s__
+○ **Ping:** __{result["ping"]} ms__
+♝ **ISP:** __{result["client"]["isp"]}__
 """
     await speed.delete()
     return await message.reply_photo(

@@ -34,7 +34,7 @@ async def get_id_info(client: Client, message: Message):
     
     # Prepare the response in markdown format
     response = (
-        f"**𝙼𝚎𝚜𝚜𝚊𝚐𝚎 𝙸𝚗𝚏𝚘𝚛𝚖𝚊𝚝𝚒𝚘𝚗**\n\n"
+        f"♚ **𝙼𝚎𝚜𝚜𝚊𝚐𝚎 𝙸𝚗𝚏𝚘𝚛𝚖𝚊𝚝𝚒𝚘𝚗**\n\n"
         f"⟢ **Message ID:** {message_id}\n"
         f"⟢ **Date:** `{date}`\n\n"
         f"⟢ **User Information**\n\n"

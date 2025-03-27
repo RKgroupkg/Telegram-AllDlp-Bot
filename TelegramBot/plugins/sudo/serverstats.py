@@ -49,7 +49,7 @@ async def stats(_, message: Message):
     disk_used = get_readable_bytes(used)
     disk_free = get_readable_bytes(free)
 
-    caption = f"**OS Uptime:** {osuptime}\n**Bot Usage:** {botusage}\n\n**Total Space:** {disk_total}\n**Free Space:** {disk_free}\n\n**Download:** {download}\n**Upload:** {upload}"
+    caption = f"♚ **OS Uptime:** __{osuptime}__\n♔ **Bot Usage:** __{botusage}__\n\n♕ **Total Space:** __{disk_total}__\n♛ **Free Space:** __{disk_free}__\n\n♛ **Download:** __{download}__\n♛ **Upload:** __{upload}__"
 
     start = datetime.now()
     msg = await message.reply_photo(

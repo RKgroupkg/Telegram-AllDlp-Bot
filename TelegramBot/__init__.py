@@ -46,7 +46,8 @@ except RuntimeError:
 LOGGER(__name__).info("setting up pinger for keep alive ....")
 
 try:
-  service.start()
+  # service.start()
+  pass
 except Exception as e:
   raise e
 # https://patorjk.com/software/taag/#p=display&f=Graffiti&t=Type%20Something%20

@@ -8,6 +8,7 @@ telegraph[aio]
 cachetools 
 aiofiles
 psutil
+humanize
 httpx
 motor
 bs4

@@ -21,12 +21,12 @@ from TelegramBot.config import(
     COOKIE_ROTATION_COOLDOWN, # seconds between using the same cookie file
     DEFAULT_COOKIES_DIR,
     YT_PROGRESS_UPDATE_INTERVAL,
-    YT_DOWNLOAD_PATH,
+    CATCH_PATH,
     MAX_VIDEO_LENGTH_MINUTES,
 )
 
 # Ensure download directory exists
-os.makedirs(YT_DOWNLOAD_PATH, exist_ok=True)
+os.makedirs(CATCH_PATH, exist_ok=True)
 os.makedirs(DEFAULT_COOKIES_DIR, exist_ok=True)
 
 
@@ -624,7 +624,7 @@ async def download_youtube_video(
     tracker = DownloadTracker(progress_callback)
     
     # Create output filename with temp suffix during download
-    output_template = f'{YT_DOWNLOAD_PATH}/%(id)s.%(ext)s'
+    output_template = f'{CATCH_PATH}/%(id)s.%(ext)s'
     
     # Common user agent to avoid 403 errors
     user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -827,9 +827,9 @@ def get_final_file_path(info, video_id: str, bestflac:bool =False,bestVideo: boo
     # Check postprocessed files
     if bestflac:
         possible_paths = [
-            os.path.join(YT_DOWNLOAD_PATH, f"{video_id}.flac"),
-            os.path.join(YT_DOWNLOAD_PATH, f"{video_id}.m4a"),  # Alternate audio formats
-            os.path.join(YT_DOWNLOAD_PATH, f"{video_id}.webm")
+            os.path.join(CATCH_PATH, f"{video_id}.flac"),
+            os.path.join(CATCH_PATH, f"{video_id}.m4a"),  # Alternate audio formats
+            os.path.join(CATCH_PATH, f"{video_id}.webm")
         ]
         
         for path in possible_paths:
@@ -838,8 +838,8 @@ def get_final_file_path(info, video_id: str, bestflac:bool =False,bestVideo: boo
                 return path
     elif bestVideo:
         possible_paths = [
-            os.path.join(YT_DOWNLOAD_PATH, f"{video_id}.mp4"),
-            os.path.join(YT_DOWNLOAD_PATH, f"{video_id}.webm"),  # Alternate Video formats
+            os.path.join(CATCH_PATH, f"{video_id}.mp4"),
+            os.path.join(CATCH_PATH, f"{video_id}.webm"),  # Alternate Video formats
         ]
         
         for path in possible_paths:
@@ -854,7 +854,7 @@ def get_final_file_path(info, video_id: str, bestflac:bool =False,bestVideo: boo
             return file_path
     # Fallback filename construction
     ext = 'flac' if bestflac else 'mp4'
-    fallback_path = os.path.join(YT_DOWNLOAD_PATH, f"{video_id}.{ext}")
+    fallback_path = os.path.join(CATCH_PATH, f"{video_id}.{ext}")
     
     return fallback_path,ext
 

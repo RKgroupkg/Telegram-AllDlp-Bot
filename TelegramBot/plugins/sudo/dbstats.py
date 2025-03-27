@@ -13,8 +13,8 @@ async def dbstats(_, message: Message):
     of bot user and total number of bot chats.
     """
 
-    TotalUsers = await mongodb.users.total_documents()
-    TotalChats = await mongodb.chats.total_documents()
+    TotalUsers = await MongoDb.users.total_documents()
+    TotalChats = await MongoDb.chats.total_documents()
 
-    stats_string = f"**Bot Database Statics.\n\n**Total Number of users = {TotalUsers}\nTotal number of chats  = {TotalChats}"
+    stats_string = f"**Bot Database Statics.\n\n**♚ Total Number of users : __{TotalUsers}__\n♚ Total number of chats : __{TotalChats}__"
     return await message.reply_text(stats_string)
