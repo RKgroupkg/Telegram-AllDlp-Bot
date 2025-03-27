@@ -1,7 +1,7 @@
 pyrate-limiter==2.10.0
 keep-alive-ping 
 pyrofork>=2.0.59
-TgCrypto==1.2.4
+TgCrypto==1.2.5
 python-dotenv 
 speedtest-cli
 telegraph[aio]
