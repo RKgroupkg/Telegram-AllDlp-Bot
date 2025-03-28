@@ -11,7 +11,7 @@
     <img src="https://raw.githubusercontent.com/RKgroupkg/RKGROUP/refs/heads/main/Assets/Logo/IMG_20250324_003813_410.jpg" width="200" alt="Quick DL Bot Logo">
 </p>
 
-<h1> [@Quick_dlbot](https://t.me/Quick_dlbot) - Try it now!
+<h1> <a herf='https://t.me/Quick_dlbot'>@Quick_dlbot</a> - Try it now!
 </h1>
 <hr>
 
