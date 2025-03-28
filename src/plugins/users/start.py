@@ -12,6 +12,7 @@ from pyrogram.types import (
     InlineKeyboardMarkup,
     Message,
 )
+from pyrogram.types import InputMediaPhoto
 
 from src import bot
 from src.database import database
@@ -25,7 +26,6 @@ from src.helpers.start_constants import (
     DEV_TEXT,
     SUDO_TEXT,
     DLP_TEXT,
-    BOT_PFP,
     QUICKDL_BANNER,
     QUICKDL_LOGO,
     RKGROUP_LOGO,
@@ -86,7 +86,7 @@ ABOUT_ME_BUTTON =[
         )
    ],
     [
-        InlineKeyboardButton("◄ Go Back", callback_data="START_BUTTON")
+        InlineKeyboardButton("◄ Go Back", callback_data="START_BUTTON_ABOUTME")
     ],
     ]
 
@@ -137,14 +137,22 @@ async def botCallbacks(_, CallbackQuery: CallbackQuery):
         )
 
     if CallbackQuery.data == "ABOUT_BUTTON":
-        await CallbackQuery.edit_message_text(
-            ABOUT_CAPTION, reply_markup=InlineKeyboardMarkup(ABOUT_ME_BUTTON)
+        await CallbackQuery.edit_message_media(
+            media= InputMediaPhoto( media=RKGROUP_LOGO,caption=ABOUT_CAPTION),
+            reply_markup = InlineKeyboardMarkup(ABOUT_ME_BUTTON),
         )
 
     elif CallbackQuery.data == "START_BUTTON":
         await CallbackQuery.edit_message_text(
             START_CAPTION, reply_markup=InlineKeyboardMarkup(START_BUTTON)
         )
+    elif CallbackQuery.data == "START_BUTTON_ABOUTME":
+        await CallbackQuery.edit_message_media(
+            media= InputMediaPhoto(media=QUICKDL_BANNER,caption=START_CAPTION),
+            reply_markup = InlineKeyboardMarkup(START_BUTTON),
+        )
+
+
 
     elif CallbackQuery.data == "COMMAND_BUTTON":
         await CallbackQuery.edit_message_text(

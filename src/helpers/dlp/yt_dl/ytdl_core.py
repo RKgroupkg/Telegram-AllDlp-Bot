@@ -939,3 +939,92 @@ def clean_temporary_file(file_path: str) -> bool:
     except Exception as e:
         logger.error(f"Error cleaning up file {file_path}: {str(e)}")
         return False
+
+
+
+async def download_video_from_link(
+    video_url: str,
+    format_id: str = 'best',
+    progress_callback: Callable[[Dict[str, Any]], Coroutine] = None,
+    extra_opts: Optional[Dict[str, Any]] = None
+) -> DownloadInfo:
+    """
+    Download a video from any supported site using yt_dlp,
+    excluding YouTube URLs.
+
+    Args:
+        video_url: The direct URL of the video.
+        format_id: The desired format (default 'best').
+        progress_callback: Async callback for progress updates.
+        extra_opts: Additional yt_dlp options.
+
+    Returns:
+        DownloadInfo with the download result.
+    """
+    # Exclude YouTube URLs
+    if "youtube.com" in video_url or "youtu.be" in video_url:
+        return DownloadInfo(success=False, error="YouTube URLs are not supported.")
+
+    # Use generic options
+    ydl_opts = {
+        "nocheckcertificate": True,
+        "quiet": True,
+        "no_warnings": True,
+        "outtmpl": os.path.join(CATCH_PATH, "%(id)s.%(ext)s"),
+        "socket_timeout": 30,
+        "retries": 2,
+        "fragment_retries": 2,
+        "format": format_id,
+        "progress_hooks": []
+    }
+    
+    # Merge any extra options provided by the caller.
+    if extra_opts:
+        ydl_opts.update(extra_opts)
+    
+    # Setup progress hook if a callback is provided.
+    if progress_callback:
+        def progress_hook(d):
+            update_data = d.copy()
+            if 'status' not in update_data:
+                update_data['status'] = 'unknown'
+            # Schedule the async callback in the current loop.
+            asyncio.run_coroutine_threadsafe(progress_callback(update_data), asyncio.get_running_loop())
+        ydl_opts['progress_hooks'].append(progress_hook)
+    
+    def download_fn():
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                return ydl.extract_info(video_url, download=True)
+        except Exception as e:
+            # Log or handle the exception as needed
+            return {"error": str(e)}
+
+    # Run download with the download pool.
+    info = await download_pool.run_download(download_fn)
+    
+    # Check if an error occurred during extraction.
+    if not info or info.get("error"):
+        error_msg = info.get("error", "Unknown error during download.")
+        return DownloadInfo(success=False, error=error_msg)
+    
+    # Determine file path from info.
+    video_id = info.get('id', 'unknown')
+    file_path = get_final_file_path(info, video_id)
+    
+    # Verify the file exists.
+    if os.path.exists(file_path):
+        return DownloadInfo(
+            success=True,
+            id=video_id,
+            url=info.get('webpage_url', video_url),
+            file_path=file_path,
+            title=info.get('title', 'Unknown Title'),
+            performer=info.get('uploader', 'Unknown'),
+            thumbnail=info.get('thumbnail', ''),
+            ext=file_path.split('.')[-1],
+            filesize=os.path.getsize(file_path),
+            duration=info.get('duration', 0)
+        )
+    else:
+        return DownloadInfo(success=False, error="Download completed but file not found")

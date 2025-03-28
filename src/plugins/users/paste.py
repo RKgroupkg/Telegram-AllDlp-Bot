@@ -32,8 +32,8 @@ async def paste(_, message: Message):
         # Handle text pasting (text or text file)
         elif replied_message.text or (replied_message.document and any(format in replied_message.document.mime_type for format in {"text", "json"})):
             buttons = [
-                [InlineKeyboardButton("Katb.in", callback_data="paste_katbin"),
-                 InlineKeyboardButton("Telegraph", callback_data="paste_telegraph")]
+                [InlineKeyboardButton("◍ Katb.in", callback_data="paste_katbin"),
+                 InlineKeyboardButton("◍ Telegraph", callback_data="paste_telegraph")]
             ]
             await paste_reply.edit("Choose paste service:", reply_markup=InlineKeyboardMarkup(buttons))
             return
@@ -45,10 +45,10 @@ async def paste(_, message: Message):
     # Handle direct text input with the command
     elif len(message.command) > 1:
         buttons = [
-            [InlineKeyboardButton("Katb.in", callback_data="paste_katbin"),
-             InlineKeyboardButton("Telegraph", callback_data="paste_telegraph")]
+            [InlineKeyboardButton("◍ Katb.in", callback_data="paste_katbin"),
+             InlineKeyboardButton("◍ Telegraph", callback_data="paste_telegraph")]
         ]
-        await paste_reply.edit("Choose paste service:", reply_markup=InlineKeyboardMarkup(buttons))
+        await paste_reply.edit("♔ Choose paste service:", reply_markup=InlineKeyboardMarkup(buttons))
         return
 
     else:
@@ -95,7 +95,7 @@ async def paste_callback(client, callback_query):
     # Paste the content and update the message
     try:
         output = await paste_func(content)
-        button = [[InlineKeyboardButton(text=f"Pasted to {service_name} 🔗", url=output)]]
+        button = [[InlineKeyboardButton(text=f"♔ Pasted to {service_name} ", url=output)]]
         await callback_query.message.edit_text(
             output,
             reply_markup=InlineKeyboardMarkup(button),

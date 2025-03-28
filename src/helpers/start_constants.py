@@ -2,14 +2,13 @@ from src.version import (__python_version__, __version__, __pyro_version__, __li
 
 
 # Load images into memory once at startup
-QUICKDL_BANNER = 10
+QUICKDL_BANNER = "https://raw.githubusercontent.com/RKgroupkg/Telegram-AllDlp-Bot/refs/heads/main/src/helpers/assets/QuickDlBanner.jpg"
 
-QUICKDL_LOGO = 1
+QUICKDL_LOGO = "https://raw.githubusercontent.com/RKgroupkg/Telegram-AllDlp-Bot/refs/heads/main/src/helpers/assets/QuickDlLogo.jpg"
 
-RKGROUP_LOGO = 1
-        
+RKGROUP_LOGO = "https://raw.githubusercontent.com/RKgroupkg/Telegram-AllDlp-Bot/refs/heads/main/src/helpers/assets/RKgroupLogo.jpg"
+
 BOT_NAME = f"@Quick_dlbot"
-BOT_PFP = "https://raw.githubusercontent.com/RKgroupkg/RKGROUP/refs/heads/main/Assets/Logo/IMG_20250324_003813_410.jpg"
 DLP_TEXT ="""
 
 <b>━━━〔 Dlp Cmd Doc 〕━━━</b>
@@ -86,11 +85,8 @@ ABOUT_CAPTION = f"""• Python version : {__python_version__}
 START_ANIMATION = "https://images.app.goo.gl/hjN3cqtM43Bs95fJ6"
 
 START_CAPTION = """
-♔ **Step into a world of swift downloads**.\n from __Instagram__ to __Spotify__ to __Youtube__, I deliver with professional precision.
+♔ **Step into a world of swift downloads**.\nfrom __Instagram__ to __Spotify__ to __Youtube__, I deliver with professional precision.
 """
 
-START_CAPTION_gr= """
-**Thanks for adding me In !**\n\n\n**Step into a world of swift downloads**.\n From __Instagram__ to ___Spotify__ to __Youtube__, I deliver with professional precision.
-"""
 
 COMMAND_CAPTION = """**𝙷𝚎𝚛𝚎 𝚊𝚛𝚎 𝚝𝚑𝚎 𝚕𝚒𝚜𝚝 𝚘𝚏 𝚌𝚘𝚖𝚖𝚊𝚗𝚍𝚜 𝚠𝚑𝚒𝚌𝚑 𝚢𝚘𝚞 𝚌𝚊𝚗 𝚞𝚜𝚎 𝚒𝚗 𝚋𝚘𝚝.\n**"""
