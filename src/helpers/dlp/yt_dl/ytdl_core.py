@@ -2,7 +2,6 @@ import os
 import time
 import random
 import asyncio
-import logging
 
 import shutil
 import tempfile
@@ -10,8 +9,15 @@ import tempfile
 import yt_dlp
 import threading
 from datetime import timedelta
-from typing import Dict, Any, Callable, Coroutine, Optional, List, Set
+from typing import Dict, Any, Callable, Coroutine, Optional, List, Set,Union
 from concurrent.futures import ThreadPoolExecutor
+
+from .dataclass import (
+    DownloadInfo,
+    SearchInfo,
+    VideoSearchResult,
+    PlaylistSearchResult,
+)
 
 
 from src.logging import LOGGER
@@ -103,6 +109,10 @@ class CookieManager:
         self._lock = asyncio.Lock()
         self.refresh_cookies_list()
         self._initialized = True
+
+
+
+
     
     def fix_cookie_file(self, input_file, output_file):
         """Fix cookie file by ensuring tab separation in cookie entries."""
@@ -156,7 +166,24 @@ class CookieManager:
             self.cookies_files.append('cookies.txt')
             
         logger.info(f"Found {len(self.cookies_files)} valid cookie files")
-    
+
+    async def refresh_cookies(self):
+        """
+        Thread-safe method to refresh the list of available cookie files.
+        Can be called by multiple modules safely.
+        
+        Returns:
+            int: Number of cookie files found after refresh
+        """
+        async with self._lock:
+            # Refresh the cookies list
+            self.refresh_cookies_list()
+            
+            # Log the refresh operation
+            logger.info(f"Cookies refreshed. Total cookie files: {len(self.cookies_files)}")
+            
+            return len(self.cookies_files)
+        
     async def get_cookie_file(self) -> Optional[str]:
         """Get the next cookie file to use based on rotation policy"""
         async with self._lock:
@@ -191,8 +218,6 @@ class CookieManager:
 # Singleton instance
 cookie_manager = CookieManager()
 
-# Thread-local storage for event loops
-_thread_local = threading.local()
 
 def get_or_create_eventloop():
     """Get the current event loop or create a new one for the current thread"""
@@ -284,11 +309,11 @@ download_pool = DownloadPool()
 async def search_youtube(
     query: str, 
     max_results: int = 1,  # Changed to 1 to return top result only
-    include_playlists: bool = False,
+    include_playlists: bool = True,
     language: str = None,
     timeout: int = 15,
     use_cookie: bool = True
-) -> List[Dict[str, Any]]:
+) -> List[Union[VideoSearchResult, PlaylistSearchResult]]:
     """
     Search YouTube for videos matching a query and return the top result with info
     
@@ -372,7 +397,7 @@ async def search_youtube(
                     'entries_count': entry.get('entries_count', 0),
                     'uploader': entry.get('uploader', 'Unknown'),
                 }
-                results.append(result)
+                results.append(PlaylistSearchResult(**result))
             else:
                 # Extract relevant information for videos
                 result = {
@@ -383,8 +408,8 @@ async def search_youtube(
                     'duration': entry.get('duration', 0),
                     'duration_string': format_duration(entry.get('duration', 0)),
                     'uploader': entry.get('uploader', 'Unknown'),
-                    'uploader_id': entry.get('uploader_id', 'Unknown'),
-                    'description': entry.get('description', ''),
+                    'uploader_id': 'Unknown' if entry.get('uploader_id') is None else entry.get('uploader_id'),
+                    'description': '' if entry.get('description') is None else entry.get('description'),
                     'view_count': entry.get('view_count', 0),
                     'upload_date': format_upload_date(entry.get('upload_date', '')),
                     'type': 'video',
@@ -395,21 +420,7 @@ async def search_youtube(
                 if MAX_VIDEO_LENGTH_MINUTES > 0 and entry.get('duration', 0) > MAX_VIDEO_LENGTH_MINUTES * 60:
                     result['exceeds_max_length'] = True
                 
-                # If this is the top result, get additional info like fetch_youtube_info would
-                if max_results == 1:
-                    try:
-                        additional_info = await fetch_youtube_info(entry.get('id'))
-                        if additional_info:
-                            # Merge additional format info
-                            result['formats'] = additional_info.get('formats', [])
-                            result['all_formats'] = additional_info.get('all_formats', [])
-                            result['video_formats'] = additional_info.get('video_formats', [])
-                            result['audio_formats'] = additional_info.get('audio_formats', [])
-                            result['combined_formats'] = additional_info.get('combined_formats', [])
-                    except Exception as e:
-                        logger.warning(f"Could not fetch additional info for top result: {str(e)}")
-                
-                results.append(result)
+                results.append(VideoSearchResult(**result))
         
         return results
     except Exception as e:
@@ -442,7 +453,7 @@ def format_upload_date(date_str: str) -> str:
     except:
         return date_str
         
-async def fetch_youtube_info(video_id: str) -> Optional[Dict[str, Any]]:
+async def fetch_youtube_info(video_id: str) -> Optional[SearchInfo]:
     """
     Fetch information about a YouTube video
     
@@ -543,24 +554,24 @@ async def fetch_youtube_info(video_id: str) -> Optional[Dict[str, Any]]:
         fmt['video_id'] = video_id
     formats.extend(audio_formats)
     
-    # Save relevant info
-    result = {
-        'title': info.get('title', 'Unknown Title'),
-        'duration': info.get('duration', 0),
-        'thumbnail': info.get('thumbnail', None),
-        'uploader': info.get('uploader', 'Unknown'),
-        'view_count': info.get('view_count', 0),
-        "cache-dir": "/tmp/",
-        'upload_date': format_upload_date(info.get('upload_date', '')),
-        'description': info.get('description', ''),
-        'formats': formats,
-        'all_formats': formats,
-        'video_formats': video_formats,
-        'audio_formats': audio_formats,
-        'combined_formats': combined_formats
-    }
-    
-    return result
+    return SearchInfo(
+        id = video_id,
+        title = info.get('title', 'Unknown Title'),
+        duration = info.get('duration', 0),
+        thumbnail = info.get('thumbnail', None),
+        uploader = info.get('uploader', 'Unknown'),
+        view_count = info.get('view_count', 0),
+        cache_dir = "/tmp/",
+        upload_date = format_upload_date(info.get('upload_date', '')),
+        description = info.get('description', ''),
+        formats = formats,
+        all_formats = formats,
+        video_formats = video_formats,
+        udio_formats = audio_formats,
+        combined_formats = combined_formats
+
+    )
+
 
 async def format_progress(current: int, total: int, start_time: float) -> str:
     """
@@ -605,7 +616,7 @@ async def download_youtube_video(
     progress_callback: Callable[[Dict[str, Any]], Coroutine],
     bestflac: bool = False, 
     bestVideo: bool = False,
-) -> Dict[str, Any]:
+) -> DownloadInfo:
     """
     Download a YouTube video with progress updates
     
@@ -662,6 +673,7 @@ async def download_youtube_video(
     # Add cookie file if available
     if cookie_file:
         ydl_opts['cookiefile'] = cookie_file
+        logger.info(f"Using Cookie: {cookie_file}")
     
     # Use a queue for thread-safe progress updates
     progress_queue = asyncio.Queue()
@@ -793,23 +805,24 @@ async def download_youtube_video(
     
     
     if os.path.exists(file_path):
-        return {
-            'success': True,
-            'id':info.get('id'),
-            'url':info.get('webpage_url'),
-            'file_path': file_path,
-            'title': info.get('title', 'Unknown Title'),
-            'performer': info.get('uploader', 'Unknown Channel'),
-            'thumbnail': info.get('thumbnail', ''),
-            'ext': ext,
-            'filesize': os.path.getsize(file_path),
-            'duration': info.get('duration', 0)
-        }
+       return DownloadInfo(
+        success=True,
+        id = info.get('id'),
+        url = info.get('webpage_url'),
+        file_path = file_path,
+        title = info.get('title', 'Unknown Title'),
+        performer =  info.get('uploader', 'Unknown Channel'),
+        thumbnail = info.get('thumbnail', ''),
+        ext = ext,
+        filesize = os.path.getsize(file_path),
+        duration = info.get('duration', 0)
+        )
+        
     else:
-        return {
-            'success': False,
-            'error': "Download completed but file not found at expected location"
-        }
+        return DownloadInfo(
+            success = False,
+            error = "Download completed but file not found at expected location"
+        )
 
 def get_final_file_path(info, video_id: str, bestflac:bool =False,bestVideo: bool = False):
     """

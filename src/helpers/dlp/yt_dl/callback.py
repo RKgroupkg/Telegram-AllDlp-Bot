@@ -89,7 +89,7 @@ async def handle_youtube_link(client: Client, message: Message) -> None:
             for attempt in range(MAX_RETRIES):
                 try:
                     info = await fetch_youtube_info(video_id)
-                    if info:
+                    if info.success:
                         add_video_info_to_cache(video_id, info)
                         break
                 except Exception as e:
@@ -106,7 +106,7 @@ async def handle_youtube_link(client: Client, message: Message) -> None:
             return
         
         # Check video duration
-        duration_minutes = info['duration'] / 60
+        duration_minutes = info.duration / 60
         if duration_minutes > MAX_VIDEO_LENGTH_MINUTES:
             await processing_msg.edit_text(
                 f"⚠ Video is too long ({int(duration_minutes)} minutes). Maximum allowed duration is {MAX_VIDEO_LENGTH_MINUTES} minutes."
@@ -114,27 +114,27 @@ async def handle_youtube_link(client: Client, message: Message) -> None:
             return
         
         # Format duration
-        duration_str = str(timedelta(seconds=info['duration']))
+        duration_str = str(timedelta(seconds=info.duration))
         
         # Get user's preferred filter type
         preferred_filter = user_preferences.get(user_id, {}).get('filter_type', 'all')
         
         # Filter formats based on user preference
         if preferred_filter == "video":
-            info['formats'] = info['combined_formats'] + info['video_formats']
+            info.formats = info.combined_formats + info.video_formats
         elif preferred_filter == "audio":
-            info['formats'] = info['audio_formats']
+            info.formats = info.audio_formats
         
         # Create format selection keyboard
-        markup = create_format_selection_markup(info['formats'], page=0)
+        markup = create_format_selection_markup(info.formats, page=0)
         
         # Update message with video information and format selection
         await processing_msg.edit_text(
-            f"≡ __{info['title'][:30]}...__\n\n"
-            f"𓇳 Uploader: __{info['uploader']}__\n"
+            f"≡ __{info.title[:30]}...__\n\n"
+            f"𓇳 Uploader: __{info.uploader}__\n"
             f"⦿ Duration: __{duration_str}__\n"
-            f"⌘ Views: __{beautify_views(int(info.get('view_count', 'N/A')))}__\n"
-            f"[​]({info.get('thumbnail')})\n"
+            f"⌘ Views: __{beautify_views(int(info.view_count))}__\n"
+            f"[​]({info.thumbnail})\n"
             f"Please select a format to download:",
             reply_markup=markup
         )
@@ -599,7 +599,7 @@ async def start_download(client : Client, callback_query, message, video_id, for
                 result = await download_task
                 
                 # If successful, break the retry loop
-                if result['success']:
+                if result.success:
                     break
                 
                 # If cancelled, also break
@@ -627,7 +627,7 @@ async def start_download(client : Client, callback_query, message, video_id, for
             await process_next_in_queue(client, user_id, message)
             return
         
-        if not result['success']:
+        if not result.success:
             await message.edit_text(
                 f"✖ Download failed after {MAX_RETRIES} attempts: {result.get('error', 'Unknown error')}"
             )
@@ -635,16 +635,16 @@ async def start_download(client : Client, callback_query, message, video_id, for
             return
         
         # Upload the file to Telegram
-        file_path = result['file_path']
-        title = f"{result['title'][:40]}."
-        ext = result['ext']
-        performer = result['performer']
-        videoId = result['id']
+        file_path = result.file_path
+        title = f"{result.title[:40]}."
+        ext = result.ext
+        performer = result.performer
+        videoId = result.id
         Thumbpath= f"/tmp/thumbnails/{videoId}.jpg"
         thumbnail = f"https://img.youtube.com/vi/{videoId}/default.jpg"
-        duration = result['duration']
-        filesize = result['filesize']
-        Url = result['url']
+        duration = result.duration
+        filesize = result.filesize
+        Url = result.url
 
         
         # Determine if it's audio or video based on extension

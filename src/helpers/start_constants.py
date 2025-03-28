@@ -53,6 +53,8 @@ SUDO_TEXT = """
 • /catch: clear the catch and useless file (Its automatic also)
 
 • /ytstats: shows Yt stats
+
+• /cookie <basteBinUrl>: To add new cookie and load it (Note use base64 encoding while uploding)
 """
 
 DEV_TEXT = """
@@ -77,7 +79,7 @@ ABOUT_CAPTION = f"""• Python version : {__python_version__}
 START_ANIMATION = "https://images.app.goo.gl/hjN3cqtM43Bs95fJ6"
 
 START_CAPTION = """
-**Step into a world of swift downloads**.\n From __Instagram__ to ___Spotify__ to __Youtube__, I deliver with professional precision.
+♔ **Step into a world of swift downloads**.\n from __Instagram__ to __Spotify__ to __Youtube__, I deliver with professional precision.
 """
 
 START_CAPTION_gr= """

@@ -1,3 +1,9 @@
+#  Copyright (c) 2025 Rkgroup.
+#  Quick Dl is an open-source Downloader bot licensed under MIT.
+#  All rights reserved where applicable.
+#
+#
+
 import os
 import asyncio
 from io import BytesIO

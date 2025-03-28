@@ -1,4 +1,9 @@
 # src/helpers/dlp/yt_dl/utils.py
+#  Copyright (c) 2025 Rkgroup.
+#  Quick Dl is an open-source Downloader bot licensed under MIT.
+#  All rights reserved where applicable.
+#
+#
 
 import re
 from typing import List, Dict, Any, Optional

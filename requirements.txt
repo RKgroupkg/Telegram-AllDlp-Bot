@@ -18,3 +18,4 @@ spotipy
 ffmpeg
 yt_dlp
 aiohttp
+pydantic

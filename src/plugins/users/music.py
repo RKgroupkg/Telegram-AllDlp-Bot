@@ -1,5 +1,10 @@
 from datetime import timedelta
-from typing import List, Dict, Any, Optional
+from typing import List, Union
+from src.helpers.dlp.yt_dl.dataclass import (
+    VideoSearchResult,
+    PlaylistSearchResult,
+)
+
 
 from pyrogram import filters
 from pyrogram.types import (
@@ -103,7 +108,7 @@ async def music_search(_, message: Message):
 
 async def send_music_results(
     message: Message, 
-    results: List[Dict[str, Any]], 
+    results: List[Union[VideoSearchResult, PlaylistSearchResult]], 
     page: int = 0, 
     results_per_page: int = 5
 ):
@@ -122,9 +127,9 @@ async def send_music_results(
         
         for idx, result in enumerate(current_page_results, 1):
             # Truncate and clean up track details
-            title = truncate_text(result['title'], 40)
-            uploader = truncate_text(result['uploader'], 25)
-            duration = format_duration(result.get('duration', 0))
+            title = truncate_text(result.title, 40)
+            uploader = truncate_text(result.uploader, 25)
+            duration = format_duration(result.duration)
             
             track_info = (
                 f"<code>〔{start_idx + idx}〕.</code> "
@@ -134,8 +139,8 @@ async def send_music_results(
             result_text.append(track_info)
             
             # Create compact callback button with shortened title
-            short_title = truncate_text(result['title'], 15)
-            callback_data = f"music_select:{result['id']}"
+            short_title = truncate_text(result.title, 15)
+            callback_data = f"music_select:{result.id}"
             keyboard.append([
                 InlineKeyboardButton(
                     f"〔{start_idx + idx}〕 {short_title}", 
@@ -244,7 +249,7 @@ async def music_select_handler(_, query: CallbackQuery):
         )
         
         # Find the selected track
-        selected_track = next((track for track in results if track['id'] == video_id), None)
+        selected_track = next((track for track in results if track.id == video_id), None)
         
         if selected_track:
             # Fetch video information with retries
@@ -256,7 +261,7 @@ async def music_select_handler(_, query: CallbackQuery):
                 logger.info(f"Fetching info for video {video_id}")
                 try:
                     info = await fetch_youtube_info(video_id)
-                    if info:
+                    if info.success:
                         add_video_info_to_cache(video_id, info)
                     else:
                         await msg.edit_text(
@@ -269,32 +274,32 @@ async def music_select_handler(_, query: CallbackQuery):
                         raise e
             
              # Check video duration
-            duration_minutes = info['duration'] / 60
+            duration_minutes = info.duration / 60
             if duration_minutes > MAX_VIDEO_LENGTH_MINUTES:
                 await msg.edit_text(
                     f"⚠ Video is too long ({int(duration_minutes)} minutes). Maximum allowed duration is {MAX_VIDEO_LENGTH_MINUTES} minutes."
                 )
                 return
             # Format duration
-            duration_str = str(timedelta(seconds=info['duration']))
+            duration_str = str(timedelta(seconds=info.duration))
             
                 
             # Create format selection markup
-            formats = info.get('all_formats', [])
+            formats = info.all_formats
             if not formats:
                 await msg.edit_text(
-                    f"♪ <b>{info['title']}</b>\n"
+                    f"♪ <b>{info.thumbnail}</b>\n"
                     f"✖ <i>No downloadable formats found</i>"
                 )
                 return
             # Show available formats
             format_markup = create_format_selection_markup(formats)
             await msg.edit_text(
-                f"≡ __{info['title'][:30]}...__\n\n"
-                f"𓇳 Uploader: __{info['uploader']}__\n"
+                f"≡ __{info.title[:30]}...__\n\n"
+                f"𓇳 Uploader: __{info.uploader}__\n"
                 f"⦿ Duration: __{duration_str}__\n"
-                f"⌘ Views: __{info.get('view_count', 'N/A')}__\n"
-                f"[​]({info.get('thumbnail')})\n"
+                f"⌘ Views: __{info.view_count}__\n"
+                f"[​]({info.thumbnail})\n"
                 f"Please select a format to download:",
                 reply_markup=format_markup
             )
@@ -305,7 +310,7 @@ async def music_select_handler(_, query: CallbackQuery):
     
     except Exception as e:
         logger.error(f"Music selection error: {str(e)}")
-        await msg.edit_text(f"Error: {str(e)}")
+        await msg.edit_text(f"**Please retry **\n\n Error: {str(e)}")
 
 
 # Placeholder for additional callback handlers

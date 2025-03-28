@@ -1,3 +1,9 @@
+#  Copyright (c) 2025 Rkgroup.
+#  Quick Dl is an open-source Downloader bot licensed under MIT.
+#  All rights reserved where applicable.
+#
+#
+
 from pyrogram import filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import (
@@ -20,7 +26,6 @@ from src.helpers.start_constants import (
     SUDO_TEXT,
     DLP_TEXT,
     BOT_PFP,
-    START_CAPTION_gr,
 )
 
 
@@ -53,7 +58,10 @@ COMMAND_BUTTON = [
         InlineKeyboardButton("⚜ Users", callback_data="USER_BUTTON"),
         InlineKeyboardButton("⚜ Sudo", callback_data="SUDO_BUTTON"),
     ],
-    [InlineKeyboardButton("⚜ Developer", callback_data="DEV_BUTTON")],
+    [InlineKeyboardButton("⚜ Developer", callback_data="DEV_BUTTON"),
+     InlineKeyboardButton("⚜ Inline", switch_inline_query="")
+    ],
+    [InlineKeyboardButton("⚜ How to use?", url="https://telegra.ph/Quickl-Dl-03-28")],
     [InlineKeyboardButton("◄ Go Back", callback_data="START_BUTTON")],
 ]
 

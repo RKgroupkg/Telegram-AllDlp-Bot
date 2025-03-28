@@ -3,7 +3,15 @@ import time
 import threading
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, Union
+
+
+
+from .dataclass import (
+    DownloadInfo,
+    SearchInfo,
+)
+
 
 # Configuration constants
 CACHE_EXPIRY_HOURS = 1  # Cache expiry time in hours
@@ -123,16 +131,16 @@ def get_callback_data(callback_id: str) -> Optional[Dict[str, Any]]:
     logger.debug(f"Retrieved callback data: {callback_id}")
     return cache_item['data']
 
-def add_video_info_to_cache(video_id: str, info: Dict[str, Any]) -> None:
+def add_video_info_to_cache(video_id: str, info: Union[Dict[str, Any], SearchInfo]) -> None:
     """
     Add video information to cache
     
     Args:
         video_id: YouTube video ID
-        info: Video information
+        info: Video information (dict or SearchInfo object)
     """
-    # Create a deep copy to prevent shared references
-    cache_info = info.copy()
+    # Convert to dict if it's a SearchInfo object, otherwise use as-is
+    cache_info = info.dict() if isinstance(info, SearchInfo) else info.copy()
     cache_info['cached_at'] = datetime.now()
     video_info_cache.set(video_id, cache_info)
     logger.debug(f"Added video info to cache: {video_id}")

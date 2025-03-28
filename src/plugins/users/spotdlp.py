@@ -1,5 +1,10 @@
+#  Copyright (c) 2025 Rkgroup.
+#  Quick Dl is an open-source Downloader bot licensed under MIT.
+#  All rights reserved where applicable.
+#
+#
+
 import re
-import os
 from time import time
 from typing import Dict, Any, Optional, Tuple
 
@@ -14,7 +19,9 @@ from src.helpers.dlp.yt_dl.ytdl_core import search_youtube, fetch_youtube_info
 from src.helpers.dlp.yt_dl.utils import create_format_selection_markup
 from src.config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
 
-
+from src.helpers.dlp.yt_dl.dataclass import (
+    SearchInfo,
+)
 from src.helpers.dlp.yt_dl.catch import (
     get_callback_data, get_video_info_from_cache, add_video_info_to_cache,
     clear_video_info_cache, clean_expired_cache
@@ -104,7 +111,7 @@ async def get_spotify_track_info(track_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-async def find_youtube_match(track_info: Dict[str, Any]) -> Optional[Tuple[Dict[str, Any], str]]:
+async def find_youtube_match(track_info: Dict[str, Any]) -> Optional[SearchInfo]:
     """
     Find a matching YouTube video for a Spotify track
     
@@ -120,13 +127,11 @@ async def find_youtube_match(track_info: Dict[str, Any]) -> Optional[Tuple[Dict[
     search_results = await search_youtube(search_query, max_results=5)
     
     if not search_results:
-        return None, None
+        return None
     
-    # Get info for the first result (best match)
-    video_id = search_results[0]['id']
-    video_info = await fetch_youtube_info(video_id)
+    video_info = await fetch_youtube_info(search_results[0].id)
     
-    return video_info, video_id
+    return video_info
 
 
 @bot.on_message(filters.regex(SPOTIFY_TRACK_REGEX)|filters.command(["spt","spotify","sptdlp","dlmusic"]) & is_ratelimiter_dl)
@@ -169,7 +174,7 @@ async def spotify_track_handler(_, message: Message):
         clean_expired_cache()
 
         # Find YouTube match
-        youtube_info, video_id = await find_youtube_match(track_info)
+        youtube_info = await find_youtube_match(track_info)
         if not youtube_info:
             await status_msg.edit_text(
                 f"♪ <b>{track_info['title']}</b>\n"
@@ -180,12 +185,12 @@ async def spotify_track_handler(_, message: Message):
         try:
             if youtube_info:
                 # Add to cache
-                add_video_info_to_cache(video_id, youtube_info)
+                add_video_info_to_cache(youtube_info.id, youtube_info)
         except Exception as e:
             raise e
         
         # Create format selection markup
-        formats = youtube_info.get('all_formats', [])
+        formats = youtube_info.all_formats
         
         if not formats:
             await status_msg.edit_text(

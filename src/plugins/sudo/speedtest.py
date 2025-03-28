@@ -1,3 +1,9 @@
+#  Copyright (c) 2025 Rkgroup.
+#  Quick Dl is an open-source Downloader bot licensed under MIT.
+#  All rights reserved where applicable.
+#
+#
+
 from speedtest import Speedtest
 
 from pyrogram import filters

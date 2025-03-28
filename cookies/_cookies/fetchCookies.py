@@ -1,5 +1,6 @@
-#  Copyright (c) 2025 AshokShau.
-#  TgMusicBot is an open-source Telegram music bot licensed under AGPL-3.0.
+
+#  Copyright (c) 2025 Rkgroup.
+#  Quick Dl is an open-source Downloader bot licensed under MIT.
 #  All rights reserved where applicable.
 #
 #
@@ -8,7 +9,7 @@ import asyncio
 import os
 import uuid
 from urllib.parse import urlparse
-
+import base64
 import aiofiles
 import aiohttp
 
@@ -43,6 +44,9 @@ async def save_bin_content(session: aiohttp.ClientSession, url: str) -> str | No
     filepath = os.path.join("cookies", filename)
 
     content = await fetch_content(session, url)
+
+    content = base64.b64decode(content + '==').decode('utf-8')
+
     if content:
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         try:

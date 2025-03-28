@@ -1,12 +1,16 @@
+#  Copyright (c) 2025 Rkgroup.
+#  Quick Dl is an open-source Downloader bot licensed under MIT.
+#  All rights reserved where applicable.
+#
+#
+
 import os
-import asyncio
 import datetime
 import humanize
 from typing import List, Dict, Tuple,Any
 
 from pyrogram import filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from pyrogram.errors import MessageTooLong
 
 from src.config import CATCH_PATH
 from src import bot

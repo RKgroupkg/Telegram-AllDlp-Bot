@@ -1,3 +1,9 @@
+#  Copyright (c) 2025 Rkgroup.
+#  Quick Dl is an open-source Downloader bot licensed under MIT.
+#  All rights reserved where applicable.
+#
+#
+
 from time import time
 from httpx import AsyncClient
 from datetime import datetime

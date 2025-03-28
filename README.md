@@ -11,6 +11,10 @@
     <img src="https://raw.githubusercontent.com/RKgroupkg/RKGROUP/refs/heads/main/Assets/Logo/IMG_20250324_003813_410.jpg" width="200" alt="Quick DL Bot Logo">
 </p>
 
+<h1> [@Quick_dlbot](https://t.me/Quick_dlbot) - Try it now!
+</h1>
+<hr>
+
 <h2>♜ Project Overview</h2>
 
 Quick DL Bot is an advanced, multi-platform Telegram bot designed to provide seamless multimedia downloading capabilities. Engineered with robust architecture and cutting-edge technologies, this bot offers a sophisticated solution for content retrieval across various platforms.
@@ -145,8 +149,24 @@ We welcome contributions! Please review our contribution guidelines and submit p
 
 <hr>
 
+* copyright (C) 2023 by [RKgroupkg](https://github.com/RKgroupkg)
+* Licensed under the terms of the [The MIT License](https://github.com/RKgroupkg/Pyrogram-Bot/blob/main/LICENSE)
+
+<div align="center">
+<img src="https://img.shields.io/badge/License-MIT-green.svg" align="center">
+</div>
+
+
+
+
 <p align="center">
-    <strong>Engineered with Precision by RK Group</strong>
+  <a href="https://t.me/rkgroup_update">
+    <img src="https://img.shields.io/static/v1?label=Join&message=Telegram%20Channel&color=blueviolet&style=for-the-badge&logo=telegram&logoColor=white" alt="Rkgroup Channel" />
+  </a>
+  <a href="https://telegram.me/Rkgroup_helpbot">
+    <img src="https://img.shields.io/static/v1?label=Join&message=Telegram%20Group&color=blueviolet&style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Group" />
+  </a>
 </p>
+
 </body>
 </html>

@@ -1,10 +1,19 @@
+#  Copyright (c) 2025 Rkgroup.
+#  Quick Dl is an open-source Downloader bot licensed under MIT.
+#  All rights reserved where applicable.
+#
+#
+
 import json
 import os
+import asyncio
 from typing import Optional
 from os import getenv
 from pathlib import Path
 from dotenv import load_dotenv
 from src.logging import LOGGER
+
+
 
 logger = LOGGER(__name__)
 
@@ -139,4 +148,16 @@ def process_cookie_urls(env_value: Optional[str]) -> list[str]:
 
     return [url.strip() for url in urls if url.strip()]
 
-COOKIES_URL: list[str] = process_cookie_urls(getenv("COOKIES_URL"))
+if getenv("COOKIES_URL",""):
+    
+    # loading from paste bin
+    COOKIES_URL: list[str] = process_cookie_urls(getenv("COOKIES_URL"))
+    logger.info("Processing cookies from urls")
+    from cookies._cookies.fetchCookies import save_all_cookies
+
+    loop = asyncio.get_event_loop()
+    result = loop.run_until_complete(save_all_cookies(COOKIES_URL))
+    logger.info(f"Cookies got: {result}")
+
+else:
+    COOKIES_URL = None
