@@ -1,6 +1,13 @@
-from src.version import (__python_version__, __version__, __pyro_version__, __license__)
-from src import bot
+from src.version import (__python_version__, __version__, __pyro_version__, __license__) 
 
+
+# Load images into memory once at startup
+QUICKDL_BANNER = 10
+
+QUICKDL_LOGO = 1
+
+RKGROUP_LOGO = 1
+        
 BOT_NAME = f"@Quick_dlbot"
 BOT_PFP = "https://raw.githubusercontent.com/RKgroupkg/RKGROUP/refs/heads/main/Assets/Logo/IMG_20250324_003813_410.jpg"
 DLP_TEXT ="""

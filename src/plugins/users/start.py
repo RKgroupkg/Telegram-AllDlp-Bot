@@ -26,6 +26,9 @@ from src.helpers.start_constants import (
     SUDO_TEXT,
     DLP_TEXT,
     BOT_PFP,
+    QUICKDL_BANNER,
+    QUICKDL_LOGO,
+    RKGROUP_LOGO,
 )
 
 
@@ -97,7 +100,7 @@ async def start(_, message: Message):
     await database.save_user(message.from_user)
         
     return await message.reply_photo(
-        photo = BOT_PFP,
+        photo = QUICKDL_BANNER,
         caption = START_CAPTION,
         reply_markup=InlineKeyboardMarkup(START_BUTTON),
         quote=True
