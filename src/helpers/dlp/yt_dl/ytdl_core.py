@@ -2,9 +2,11 @@ import os
 import time
 import random
 import asyncio
-
+import uuid
+import aiohttp
 import shutil
 import tempfile
+import re
 
 import yt_dlp
 import threading
@@ -18,6 +20,7 @@ from .dataclass import (
     VideoSearchResult,
     PlaylistSearchResult,
 )
+from yt_dlp.utils import ExtractorError, UnsupportedError
 
 
 from src.logging import LOGGER
@@ -939,92 +942,464 @@ def clean_temporary_file(file_path: str) -> bool:
     except Exception as e:
         logger.error(f"Error cleaning up file {file_path}: {str(e)}")
         return False
-
-
-
+    
 async def download_video_from_link(
-    video_url: str,
-    format_id: str = 'best',
-    progress_callback: Callable[[Dict[str, Any]], Coroutine] = None,
-    extra_opts: Optional[Dict[str, Any]] = None
+    url: str,
+    progress_callback: Callable[[Dict[str, Any]], Coroutine],
+    output_dir: str = "/tmp/downloads",
+    max_file_size_mb: int = 200,
+    cancel_event: Optional[asyncio.Event] = None
 ) -> DownloadInfo:
     """
-    Download a video from any supported site using yt_dlp,
-    excluding YouTube URLs.
+    Download a video from a given URL with progress updates, size limit enforcement, and cancellation support.
 
     Args:
-        video_url: The direct URL of the video.
-        format_id: The desired format (default 'best').
-        progress_callback: Async callback for progress updates.
-        extra_opts: Additional yt_dlp options.
+        url: The URL of the video to download.
+        progress_callback: Async callback function for progress updates.
+        output_dir: Directory to save the downloaded file.
+        max_file_size_mb: Maximum allowed file size in MB (default: 200).
+        cancel_event: Event to signal download cancellation.
 
     Returns:
-        DownloadInfo with the download result.
+        DownloadInfo object with download results.
     """
-    # Exclude YouTube URLs
-    if "youtube.com" in video_url or "youtu.be" in video_url:
-        return DownloadInfo(success=False, error="YouTube URLs are not supported.")
-
-    # Use generic options
+    # Constants
+    MAX_SIZE_BYTES = max_file_size_mb * 1024 * 1024
+    MAX_RETRIES = 3
+    RETRY_DELAY = 2
+    PROGRESS_TIMEOUT = 0.5
+    
+    # Initialize cancel_event if not provided
+    if cancel_event is None:
+        cancel_event = asyncio.Event()
+    
+    # Ensure output directory exists
+    try:
+        os.makedirs(output_dir, exist_ok=True)
+    except OSError as e:
+        logger.error(f"Failed to create output directory {output_dir}: {str(e)}")
+        return DownloadInfo(success=False, error=f"Failed to create output directory: {str(e)}")
+    
+    # Sanitize URL
+    url = url.strip()
+    if not url:
+        return DownloadInfo(success=False, error="Empty URL provided")
+    
+    # Generate unique filename to avoid conflicts
+    unique_id = str(uuid.uuid4())[:8]
+    output_template = f"{output_dir}/%(title)s-{unique_id}-%(id)s.%(ext)s"
+    
+    # Enhanced user-agent rotation for better reliability
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36 Edg/95.0.1020.44"
+    ]
+    user_agent = random.choice(user_agents)
+    
+    # Common options to improve download success
     ydl_opts = {
         "nocheckcertificate": True,
+        "geo_bypass": True,
         "quiet": True,
         "no_warnings": True,
-        "outtmpl": os.path.join(CATCH_PATH, "%(id)s.%(ext)s"),
+        "outtmpl": output_template,
         "socket_timeout": 30,
         "retries": 2,
-        "fragment_retries": 2,
-        "format": format_id,
-        "progress_hooks": []
+        "fragment_retries": 5,
+        "user_agent": user_agent,
+        "format": "best",  # Default to best available format
+        # Add more options for better network handling
+        "external_downloader_args": ['--max-concurrent-downloads', '3', '--max-connection-per-server', '5'],
     }
     
-    # Merge any extra options provided by the caller.
-    if extra_opts:
-        ydl_opts.update(extra_opts)
+    # Add file size check to options
+    class FileSizeRestriction:
+        def __init__(self, max_bytes):
+            self.max_bytes = max_bytes
+            self.current_size = 0
+            self.exceeded = False
+            self.filename = None
+            
+        def download_progress_hook(self, d):
+            if d.get('status') == 'downloading':
+                self.filename = d.get('filename')
+                if 'downloaded_bytes' in d:
+                    self.current_size = d['downloaded_bytes']
+                    if self.current_size > self.max_bytes:
+                        self.exceeded = True
+                        raise Exception(f"File size exceeds maximum limit of {max_file_size_mb}MB")
     
-    # Setup progress hook if a callback is provided.
-    if progress_callback:
-        def progress_hook(d):
-            update_data = d.copy()
-            if 'status' not in update_data:
-                update_data['status'] = 'unknown'
-            # Schedule the async callback in the current loop.
-            asyncio.run_coroutine_threadsafe(progress_callback(update_data), asyncio.get_running_loop())
-        ydl_opts['progress_hooks'].append(progress_hook)
+    file_size_checker = FileSizeRestriction(MAX_SIZE_BYTES)
     
-    def download_fn():
+    # Set up progress queue and stop event
+    progress_queue = asyncio.Queue()
+    stop_event = threading.Event()
+    
+    # Async task to process progress updates
+    async def process_progress_updates():
+        while not (stop_event.is_set() and progress_queue.empty()):
+            try:
+                # Check for cancellation
+                if cancel_event.is_set():
+                    raise asyncio.CancelledError("Download cancelled by user")
+                
+                progress_data = await asyncio.wait_for(progress_queue.get(), timeout=PROGRESS_TIMEOUT)
+                await progress_callback(progress_data)
+                progress_queue.task_done()
+            except asyncio.TimeoutError:
+                # No updates, check if cancellation is requested
+                if cancel_event.is_set():
+                    raise asyncio.CancelledError("Download cancelled by user")
+            except asyncio.CancelledError:
+                logger.info("Progress processing cancelled")
+                raise
+            except Exception as e:
+                logger.error(f"Error processing progress update: {str(e)}")
+    
+    # Get the current event loop for thread-safe operations
+    main_loop = asyncio.get_running_loop()
+    
+    # Enhanced progress hook with more detailed information
+    def progress_hook(d):
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return ydl.extract_info(video_url, download=True)
+            # Check for cancellation
+            if cancel_event.is_set():
+                d["status"] = "cancelled"
+                d["error"] = "Download cancelled by user"
+                raise Exception("Download cancelled by user")
+            
+            # First check file size
+            try:
+                file_size_checker.download_progress_hook(d)
+            except Exception as size_error:
+                d["status"] = "error"
+                d["error"] = str(size_error)
+            
+            update_data = d.copy()
+            if "status" not in update_data:
+                update_data["status"] = "unknown"
+                
+            # Add estimated size info when available
+            if d.get("status") == "downloading":
+                # Calculate and add download speed
+                if "downloaded_bytes" in d and "elapsed" in d and d["elapsed"] > 0:
+                    update_data["speed"] = d["downloaded_bytes"] / d["elapsed"]
+                
+                # Add more detailed information
+                if "total_bytes" in d:
+                    total_mb = d["total_bytes"] / (1024 * 1024)
+                    update_data["total_size_mb"] = round(total_mb, 2)
+                    if total_mb > max_file_size_mb:
+                        update_data["status"] = "error"
+                        update_data["error"] = f"File size ({round(total_mb, 2)}MB) exceeds maximum limit of {max_file_size_mb}MB"
+                
+                # Add ETA when available
+                if "eta" in d:
+                    update_data["eta"] = d["eta"]
+            
+            asyncio.run_coroutine_threadsafe(progress_queue.put(update_data), main_loop)
         except Exception as e:
-            # Log or handle the exception as needed
-            return {"error": str(e)}
-
-    # Run download with the download pool.
-    info = await download_pool.run_download(download_fn)
+            if str(e) == "Download cancelled by user":
+                # Propagate cancellation
+                stop_event.set()
+            else:
+                logger.error(f"Error in progress hook: {str(e)}")
     
-    # Check if an error occurred during extraction.
-    if not info or info.get("error"):
-        error_msg = info.get("error", "Unknown error during download.")
-        return DownloadInfo(success=False, error=error_msg)
+    ydl_opts["progress_hooks"] = [progress_hook]
     
-    # Determine file path from info.
-    video_id = info.get('id', 'unknown')
-    file_path = get_final_file_path(info, video_id)
+    # Start progress processing task
+    progress_task = asyncio.create_task(process_progress_updates())
     
-    # Verify the file exists.
-    if os.path.exists(file_path):
+    # Retry mechanism with backoff
+    retry_count = 0
+    backoff_factor = 1.5  # Exponential backoff factor
+    
+    # File size check before download (if possible)
+    try:
+        async with aiohttp.ClientSession() as session:
+            # Use head request to check content-length if available
+            async with session.head(url, timeout=10) as response:
+                if 'Content-Length' in response.headers:
+                    content_length = int(response.headers['Content-Length'])
+                    if content_length > MAX_SIZE_BYTES:
+                        stop_event.set()
+                        await asyncio.sleep(0.1)  # Give time for progress task to clean up
+                        # Cancel the progress task
+                        try:
+                            progress_task.cancel()
+                            await progress_task
+                        except asyncio.CancelledError:
+                            pass
+                        
+                        return DownloadInfo(
+                            success=False,
+                            error=f"File size ({round(content_length / (1024 * 1024), 2)}MB) exceeds maximum limit of {max_file_size_mb}MB",
+                            exceeded_size_limit=True
+                        )
+    except Exception as e:
+        # Failed to check size beforehand, will check during download
+        logger.warning(f"Unable to check file size before download: {str(e)}")
+    
+    # Download with retry logic and backoff
+    while retry_count < MAX_RETRIES:
+        # Check for cancellation
+        if cancel_event.is_set():
+            stop_event.set()
+            if progress_task and not progress_task.done():
+                try:
+                    progress_task.cancel()
+                    await asyncio.shield(asyncio.wait_for(asyncio.gather(progress_task, return_exceptions=True), timeout=1.0))
+                except (asyncio.CancelledError, asyncio.TimeoutError):
+                    pass
+                except Exception as e:
+                    logger.error(f"Error during cancellation cleanup: {str(e)}")
+            return DownloadInfo(
+                success=False,
+                error="Download cancelled by user",
+                cancelled=True
+            )
+        try:
+            def download_fn():
+                try:
+                    if cancel_event.is_set():
+                        return {"error": "Download cancelled by user", "cancelled": True}
+                    
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info_dict = ydl.extract_info(url, download=True)
+                        # If we got this far, check if file size was exceeded
+                        if file_size_checker.exceeded:
+                            # Delete partial file
+                            if file_size_checker.filename and os.path.exists(file_size_checker.filename):
+                                try:
+                                    os.remove(file_size_checker.filename)
+                                except Exception as del_err:
+                                    logger.warning(f"Failed to delete oversized file: {str(del_err)}")
+                            return {"error": f"File size exceeds maximum limit of {max_file_size_mb}MB"}
+                        return info_dict
+                except yt_dlp.utils.DownloadError as e:
+                    if cancel_event.is_set():
+                        return {"error": "Download cancelled by user", "cancelled": True}
+                    
+                    if "File size exceeds" in str(e):
+                        return {"error": str(e)}
+                    logger.error(f"yt-dlp download error: {str(e)}")
+                    return {"error": str(e)}
+                except Exception as e:
+                    if cancel_event.is_set():
+                        return {"error": "Download cancelled by user", "cancelled": True}
+                    
+                    logger.error(f"Error in download thread: {str(e)}")
+                    return {"error": str(e)}
+            
+            # Run download in thread pool
+            info = await download_pool.run_download(download_fn)
+            
+            if not info or "error" in info:
+                error_msg = info.get("error", "Failed to download video") if info else "Failed to download video"
+                
+                # Check if cancellation was requested
+                if info and info.get("cancelled", False):
+                    stop_event.set()
+                    try:
+                        progress_task.cancel()
+                        await progress_task
+                    except asyncio.CancelledError:
+                        pass
+                    return DownloadInfo(
+                        success=False,
+                        error="Download cancelled by user",
+                        cancelled=True
+                    )
+                
+                # Check if error is about file size
+                if "File size exceeds" in error_msg:
+                    stop_event.set()
+                    try:
+                        progress_task.cancel()
+                        await progress_task
+                    except asyncio.CancelledError:
+                        pass
+                    return DownloadInfo(
+                        success=False,
+                        error=error_msg,
+                        exceeded_size_limit=True
+                    )
+                
+                retry_count += 1
+                # Calculate delay with exponential backoff
+                current_delay = RETRY_DELAY * (backoff_factor ** (retry_count - 1))
+                logger.warning(f"Download failed for {url} (attempt {retry_count}/{MAX_RETRIES}): {error_msg}, retrying in {current_delay:.1f}s")
+                
+                if retry_count < MAX_RETRIES:
+                    retry_update = {
+                        "status": "retry",
+                        "retry_count": retry_count,
+                        "max_retries": MAX_RETRIES,
+                        "error": error_msg,
+                        "retry_delay": current_delay
+                    }
+                    await progress_queue.put(retry_update)
+                    await asyncio.sleep(current_delay)
+                    
+                    # Adjust download options for retry
+                    if retry_count == 1:
+                        # On first retry, try with different format
+                        ydl_opts["format"] = "bestvideo[height<=720]+bestaudio/best[height<=720]"
+                        # Use a different user agent
+                        ydl_opts["user_agent"] = random.choice(user_agents)
+                    elif retry_count == 2:
+                        # On second retry, try with cookies if available
+                        cookie_file = await cookie_manager.get_cookie_file() if 'cookie_manager' in globals() else None
+                        if cookie_file:
+                            ydl_opts["cookiefile"] = cookie_file
+                        # Try with a lower quality
+                        ydl_opts["format"] = "bestvideo[height<=480]+bestaudio/best[height<=480]"
+                    
+                    continue
+                
+                stop_event.set()
+                try:
+                    progress_task.cancel()
+                    await progress_task
+                except asyncio.CancelledError:
+                    pass
+                return DownloadInfo(
+                    success=False,
+                    error=error_msg,
+                )
+            
+            # Download successful
+            break
+        
+        except Exception as e:
+            retry_count += 1
+            # Calculate delay with exponential backoff
+            current_delay = RETRY_DELAY * (backoff_factor ** (retry_count - 1))
+            logger.warning(f"Error downloading {url} (attempt {retry_count}/{MAX_RETRIES}): {str(e)}, retrying in {current_delay:.1f}s")
+            
+            if retry_count < MAX_RETRIES:
+                retry_update = {
+                    "status": "retry",
+                    "retry_count": retry_count,
+                    "max_retries": MAX_RETRIES,
+                    "error": str(e),
+                    "retry_delay": current_delay
+                }
+                await progress_queue.put(retry_update)
+                await asyncio.sleep(current_delay)
+                continue
+            
+            stop_event.set()
+            try:
+                progress_task.cancel()
+                await progress_task
+            except asyncio.CancelledError:
+                pass
+            return DownloadInfo(
+                success=False,
+                error=str(e),
+            )
+    
+    # Stop progress processing
+    stop_event.set()
+    try:
+        progress_task.cancel()
+        await progress_task
+    except asyncio.CancelledError:
+        pass
+    
+    # Determine final file path
+    try:
+        file_path = _get_final_file_path(info, info.get("id", ""), output_dir, unique_id)
+        
+        if not os.path.exists(file_path):
+            return DownloadInfo(
+                success=False,
+                error="Download completed but file not found at expected location",
+            )
+        
+        # Final file size check
+        file_size = os.path.getsize(file_path)
+        if file_size > MAX_SIZE_BYTES:
+            # Remove the file
+            try:
+                os.remove(file_path)
+            except Exception as del_err:
+                logger.warning(f"Failed to delete oversized file: {str(del_err)}")
+            
+            return DownloadInfo(
+                success=False,
+                error=f"File size ({round(file_size / (1024 * 1024), 2)}MB) exceeds maximum limit of {max_file_size_mb}MB",
+                exceeded_size_limit=True
+            )
+        
+        ext = file_path.split(".")[-1] if "." in file_path else ""
+        
         return DownloadInfo(
             success=True,
-            id=video_id,
-            url=info.get('webpage_url', video_url),
+            id=info.get("id"),
+            url=info.get("webpage_url", url),
             file_path=file_path,
-            title=info.get('title', 'Unknown Title'),
-            performer=info.get('uploader', 'Unknown'),
-            thumbnail=info.get('thumbnail', ''),
-            ext=file_path.split('.')[-1],
-            filesize=os.path.getsize(file_path),
-            duration=info.get('duration', 0)
+            title=info.get("title", "Unknown Title"),
+            performer=info.get("uploader", "Unknown Uploader"),
+            thumbnail=info.get("thumbnail", ""),
+            ext=ext,
+            filesize=file_size,
+            duration=info.get("duration", 0),
         )
-    else:
-        return DownloadInfo(success=False, error="Download completed but file not found")
+    except Exception as e:
+        logger.error(f"Error finalizing download: {str(e)}")
+        return DownloadInfo(
+            success=False,
+            error=f"Error processing downloaded file: {str(e)}",
+        )
+
+
+def _get_final_file_path(info_dict, video_id, output_dir, unique_id):
+    """
+    Determine the final file path from the download info dictionary.
+    
+    Args:
+        info_dict: Information dictionary returned by yt-dlp
+        video_id: ID of the video
+        output_dir: Directory where file was saved
+        unique_id: Unique identifier for the file
+        
+    Returns:
+        str: Path to the downloaded file
+    """
+    if not info_dict:
+        raise ValueError("Missing info dictionary")
+    
+    # Try to get the filename directly from info_dict
+    if 'requested_downloads' in info_dict and info_dict['requested_downloads']:
+        for download in info_dict['requested_downloads']:
+            if 'filepath' in download:
+                return download['filepath']
+    
+    # Fall back to title-based filename
+    title = info_dict.get('title', 'unknown')
+    if not title or not video_id:
+        # Search output directory for files with unique_id
+        if unique_id:
+            for filename in os.listdir(output_dir):
+                if unique_id in filename:
+                    return os.path.join(output_dir, filename)
+    
+    # If we get here, try to construct filename based on known pattern
+    ext = info_dict.get('ext', 'mp4')
+    sanitized_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_')
+    expected_path = f"{output_dir}/{sanitized_title}-{unique_id}-{video_id}.{ext}"
+    
+    if os.path.exists(expected_path):
+        return expected_path
+    
+    # Last resort: search for any file with video_id
+    if video_id:
+        for filename in os.listdir(output_dir):
+            if video_id in filename:
+                return os.path.join(output_dir, filename)
+    
+    raise FileNotFoundError(f"Could not locate downloaded file for {title} with ID {video_id}")

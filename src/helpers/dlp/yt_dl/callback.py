@@ -8,7 +8,10 @@ from requests import get
 from pyrogram import Client
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import MessageNotModified, FloodWait
-
+from src.helpers.dlp._util import (
+    format_size,
+    format_time
+)
 from src.helpers.dlp.yt_dl.ytdl_core import (
     fetch_youtube_info,
     download_youtube_video,
@@ -21,7 +24,7 @@ from src.helpers.dlp.yt_dl.catch import (
     get_callback_data, get_video_info_from_cache, add_video_info_to_cache,
     clear_video_info_cache, clean_expired_cache
 )
-from src.helpers.dlp.yt_dl.utils import extract_video_id, create_format_selection_markup, YT_LINK_REGEX
+from src.helpers.dlp.yt_dl.utils import extract_video_id, create_format_selection_markup
 
 
 from src.logging import LOGGER
@@ -710,31 +713,6 @@ async def start_download(client : Client, callback_query, message, video_id, for
         await message.edit_text(f"✖  An error occurred during download: {str(e)}")
         process_next_in_queue(client, user_id, message)
 
-def format_size(size_bytes):
-    """Format file size in human readable format"""
-    if size_bytes < 1024:
-        return f"{size_bytes} B"
-    elif size_bytes < 1024 * 1024:
-        return f"{size_bytes/1024:.1f} KB"
-    elif size_bytes < 1024 * 1024 * 1024:
-        return f"{size_bytes/(1024*1024):.1f} MB"
-    else:
-        return f"{size_bytes/(1024*1024*1024):.1f} GB"
-
-def format_time(seconds):
-    """Format time in human readable format"""
-    if seconds < 60:
-        return f"{seconds:.0f}s"
-    elif seconds < 3600:
-        minutes = seconds // 60
-        seconds %= 60
-        return f"{minutes:.0f}m {seconds:.0f}s"
-    else:
-        hours = seconds // 3600
-        seconds %= 3600
-        minutes = seconds // 60
-        seconds %= 60
-        return f"{hours:.0f}h {minutes:.0f}m"
 
 async def process_next_in_queue(client, user_id, message):
     """Process next download in user's queue if any"""

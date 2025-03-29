@@ -10,13 +10,7 @@ from typing import List, Dict, Any, Optional
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from src.helpers.dlp.yt_dl.catch import store_callback_data
-
-YT_LINK_REGEX = r"(?:https?:\/\/)?(?:www\.|m\.|music\.)?" + \
-                r"(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|playlist\?(?:.*&)?list=|" + \
-                r"embed\/|v\/|channel\/|user\/|" + \
-                r"attribution_link\?(?:.*&)?u=\/watch\?(?:.*&)?v=)|" + \
-                r"youtu\.be\/|youtube\.com\/clip\/|youtube\.com\/live\/)([a-zA-Z0-9_-]{11}|" + \
-                r"[a-zA-Z0-9_-]{12,}(?=&|\?|$))"
+from src.helpers.dlp._rex import YT_LINK_REGEX
 
 
 def extract_video_id(text: str) -> Optional[str]:
