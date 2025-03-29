@@ -12,7 +12,7 @@ from src.helpers.dlp._util import (
     format_size,
     format_time
 )
-from src.helpers.dlp.yt_dl.ytdl_core import (
+from .ytdl_core import (
     fetch_youtube_info,
     download_youtube_video,
     format_progress,
@@ -20,12 +20,12 @@ from src.helpers.dlp.yt_dl.ytdl_core import (
     MAX_VIDEO_LENGTH_MINUTES,
     beautify_views
 )
-from src.helpers.dlp.yt_dl.catch import (
+from .catch import (
     get_callback_data, get_video_info_from_cache, add_video_info_to_cache,
     clear_video_info_cache, clean_expired_cache
 )
-from src.helpers.dlp.yt_dl.utils import extract_video_id, create_format_selection_markup
-
+from .utils import extract_video_id, create_format_selection_markup
+from src.helpers.dlp._Thumb.thumbnail import download_and_verify_thumbnail,delete_thumbnail
 
 from src.logging import LOGGER
 logger = LOGGER(__name__)
@@ -643,29 +643,20 @@ async def start_download(client : Client, callback_query, message, video_id, for
         ext = result.ext
         performer = result.performer
         videoId = result.id
-        Thumbpath= f"/tmp/thumbnails/{videoId}.jpg"
         thumbnail = f"https://img.youtube.com/vi/{videoId}/default.jpg"
         duration = result.duration
         filesize = result.filesize
         Url = result.url
 
-        
+        is_thumbnail_ok, thumb_path = await download_and_verify_thumbnail(thumbnail)
+        logger.info(f"Thumbnail download status: {is_thumbnail_ok}, path: {thumb_path}")
+            
         # Determine if it's audio or video based on extension
         is_audio = ext in ['mp3', 'm4a', 'aac', 'flac', 'opus', 'ogg']
         
         await message.edit_text(f"↥ Uploading __[{format_size(int(filesize))}]__\n\n  __{title}__...")
         
         try:
-            # Extract the directory path from the file path
-            directory = os.path.dirname(Thumbpath)
-
-            # Check if the directory exists; if not, create it
-            if not os.path.exists(directory):
-                os.makedirs(directory)
-
-            with open(Thumbpath,"wb") as file:
-                file.write(get(thumbnail).content) # get the thumbnail
-
 
             if is_audio:
         
@@ -674,7 +665,7 @@ async def start_download(client : Client, callback_query, message, video_id, for
                     audio=file_path,
                     performer = performer,
                     duration = duration,
-                    thumb = Thumbpath,
+                    thumb = thumb_path if is_thumbnail_ok else None,
                     caption=f"≡ __{title}__\n\n__Via__ @{(await client.get_me()).username}",
                     file_name=f"{title}.{ext}",
                     reply_to_message_id=callback_query.message.reply_to_message.id if callback_query.message.reply_to_message else None
@@ -683,7 +674,7 @@ async def start_download(client : Client, callback_query, message, video_id, for
             else:
                 await client.send_video(
                     chat_id=message.chat.id,
-                    thumb = Thumbpath,
+                    thumb = thumb_path if is_thumbnail_ok else None,
                     video=file_path,
                     caption=f"≡ __{title}__\n\n__via__ @{(await client.get_me()).username}",
                     file_name=f"{title}.{ext}",
@@ -700,8 +691,8 @@ async def start_download(client : Client, callback_query, message, video_id, for
             try:
                 if os.path.exists(file_path):
                     clean_temporary_file(file_path) # Delete the Media
-                if os.path.exists(Thumbpath):
-                    clean_temporary_file(Thumbpath) # Delete the thumbnail
+                if os.path.exists(thumb_path):
+                    delete_thumbnail(thumb_path)
             except Exception as e:
                 logger.error(f"Error cleaning up temporary file: {e}")
             
