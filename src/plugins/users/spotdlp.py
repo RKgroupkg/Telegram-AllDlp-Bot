@@ -23,14 +23,11 @@ from src.helpers.dlp.yt_dl.dataclass import (
     SearchInfo,
 )
 from src.helpers.dlp.yt_dl.catch import (
-    get_callback_data, get_video_info_from_cache, add_video_info_to_cache,
-    clear_video_info_cache, clean_expired_cache
+    add_video_info_to_cache,
+    clean_expired_cache
 )
 
-# Regex patterns for Spotify links
-SPOTIFY_TRACK_REGEX = r"(?:https?://)?(?:www\.)?open\.spotify\.com/track/([a-zA-Z0-9]+)"
-SPOTIFY_ALBUM_REGEX = r"(?:https?://)?(?:www\.)?open\.spotify\.com/album/([a-zA-Z0-9]+)"
-SPOTIFY_PLAYLIST_REGEX = r"(?:https?://)?(?:www\.)?open\.spotify\.com/playlist/([a-zA-Z0-9]+)"
+from src.helpers.dlp._rex import SPOTIFY_ALBUM_REGEX,SPOTIFY_PLAYLIST_REGEX,SPOTIFY_TRACK_REGEX 
 
 # Initialize Spotify client
 spotify_client = None

@@ -30,9 +30,8 @@ from src.helpers.decorators import catch_errors
 from src.config import RAPID_API_KEYS
 from src.helpers.start_constants import BOT_NAME  # bot name
 from src.logging import LOGGER
+from src.helpers.dlp._rex import INSTAGRAM_URL_PATTERN 
 
-# Instagram URL patterns
-INSTAGRAM_URL_PATTERN = r"https?://(?:www\.)?instagram\.com/(?:share/)?(?:p|reel|tv)/([a-zA-Z0-9_-]+)(?:/[a-zA-Z0-9_-]+)?"
 
 # Cache for storing recently processed Instagram media (to avoid repeated API calls)
 MEDIA_CACHE = {}

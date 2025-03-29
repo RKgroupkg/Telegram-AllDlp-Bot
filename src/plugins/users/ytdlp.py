@@ -9,7 +9,7 @@ from pyrogram.types import Message, CallbackQuery
 import os
 import time
 
-from src.helpers.dlp.yt_dl.utils import YT_LINK_REGEX
+from src.helpers.dlp._rex import YT_LINK_REGEX
 from src.helpers.dlp.yt_dl.catch import clean_expired_cache
 from src.helpers.dlp.yt_dl.callback import handle_youtube_link, handle_youtube_callback
 from src.helpers.filters import is_ratelimiter_dl , is_ratelimited

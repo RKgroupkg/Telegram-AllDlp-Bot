@@ -29,35 +29,16 @@ from src.helpers.dlp.yt_dl.catch import (
     clean_expired_cache
 )
 from src.helpers.dlp.yt_dl.utils import create_format_selection_markup
-
+from src.helpers.dlp._util import (
+    truncate_text,
+    format_duration
+)
 from src.logging import LOGGER
-
-
-# Configure logger
 logger = LOGGER(__name__)
 
 # Store search results temporarily 
 MUSIC_SEARCH_CACHE = {}
 
-def truncate_text(text: str, max_length: int = 40) -> str:
-    """
-    Truncate text to a specified max length with ellipsis
-    """
-    return text[:max_length] + '...' if len(text) > max_length else text
-
-def format_duration(seconds: int) -> str:
-    """Format duration in seconds to a readable string"""
-    if not seconds:
-        return "Unknown"
-        
-    minutes, seconds = divmod(seconds, 60)
-    hours, minutes = divmod(minutes, 60)
-    
-    if hours:
-        return f"{hours}:{int(minutes):02d}:{int(seconds):02d}"
-    else:
-        return f"{minutes}:{int(seconds):02d}"
-    
 
 @bot.on_message(filters.command(["music","search","play"]) & is_ratelimited)
 async def music_search(_, message: Message):
