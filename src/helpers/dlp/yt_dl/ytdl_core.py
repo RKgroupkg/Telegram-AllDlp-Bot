@@ -1347,7 +1347,7 @@ async def download_video_from_link(
             thumbnail=info.get("thumbnail", ""),
             ext=ext,
             filesize=file_size,
-            duration=info.get("duration", 0),
+            duration=int(info.get("duration", 0)),
         )
     except Exception as e:
         logger.error(f"Error finalizing download: {str(e)}")

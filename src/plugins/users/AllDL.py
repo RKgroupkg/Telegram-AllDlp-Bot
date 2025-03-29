@@ -24,7 +24,7 @@ logger = LOGGER(__name__)
 active_downloads = {}  # {chat_id: True}
 download_queue = {}    # {chat_id: [Message]}
 download_progress = {}  # {chat_id: {msg_id: {progress_data}}}
-PROGRESS_UPDATE_INTERVAL = 2  # Seconds between progress updates
+PROGRESS_UPDATE_INTERVAL = 5  # Seconds between progress updates
 MAX_QUEUE_SIZE = 5  # Maximum number of downloads that can be queued per chat
 
 # Format constants
@@ -48,7 +48,7 @@ def create_progress_bar(percentage: float) -> str:
     """Create a visual progress bar based on percentage"""
     completed = int(PROGRESS_BAR_LENGTH * percentage / 100)
     remaining = PROGRESS_BAR_LENGTH - completed
-    return '|' + '#' * completed + '-' * remaining + '|'
+    return '|' + '▰' * completed + '▱' * remaining + '|'
 
 def format_download_progress(progress_data: Dict[str, Any]) -> str:
     """Format download progress information for display"""
@@ -65,63 +65,63 @@ def format_download_progress(progress_data: Dict[str, Any]) -> str:
             progress_bar = create_progress_bar(percentage)
             
             return (
-                f"** Downloading **\n"
-                f"** Progress **: {percentage:.1f}% {progress_bar}\n"
-                f"** Size **: {format_size(downloaded)}/{format_size(total)}\n"
-                f"** Speed **: {format_size(speed)}/s\n"
-                f"** ETA **: {format_time(eta)}"
+                f"♔ ** Downloading **\n"
+                f"۞ ** Progress **: __{percentage:.1f}% {progress_bar}__\n"
+                f"✧ ** Size **: {format_size(downloaded)}/{format_size(total)}\n"
+                f"✦ ** Speed **: {format_size(speed)}/s\n"
+                f"✿ ** ETA **: {format_time(eta)}"
             )
         else:
-            return f"** Downloading **: {format_size(downloaded)}\n** Speed **: {format_size(speed)}/s"
+            return f"♔ ** Downloading **: __{format_size(downloaded)}__\n✦ ** Speed **: __{format_size(speed)}/s__"
     
     elif status == 'extracting_info':
-        return "** Analyzing link **...\nThis may take a moment for some sites."
+        return "♔ ** Analyzing link **...\n__This may take a moment for some sites.__"
     
     elif status == 'waiting_in_queue':
         position = progress_data.get('position', 0)
-        return f"** Queued ** (Position: {position})\nYour download will start automatically."
+        return f"♔ ** Queued ** (Position: {position})\n__Your download will start automatically.__"
     
     elif status == 'uploading':
         percentage = progress_data.get('percentage', 0)
         progress_bar = create_progress_bar(percentage)
-        return f"** Uploading **: {percentage:.1f}% {progress_bar}"
+        return f"♔ ** Uploading **: __{percentage:.1f}% {progress_bar}__"
     
     elif status == 'finished':
-        return "** Download complete! **\nPreparing to upload..."
+        return "♔ ** Download complete! **\n__Preparing to upload...__"
     
     elif status == 'error':
         error = progress_data.get('error', 'Unknown error')
-        return f"** Error **: {error}"
+        return f"⚠ ** Error **: __{error}__"
     
     elif status == 'retry':
         retry_count = progress_data.get('retry_count', 0)
         max_retries = progress_data.get('max_retries', 0)
-        return f"** Retrying ** ({retry_count}/{max_retries})..."
+        return f"❀ ** Retrying ** ({retry_count}/{max_retries})..."
     
-    return "** Processing **..."
+    return "♔ ** Processing **..."
 
 def get_callback_keyboard(link: str, download_info: Optional[DownloadInfo] = None, processing: bool = True) -> InlineKeyboardMarkup:
     """Generate appropriate callback keyboard based on download state"""
     buttons = []
     
     # Always show the source link
-    buttons.append([InlineKeyboardButton("Source", url=link)])
+    buttons.append([InlineKeyboardButton("❀ Source", url=link)])
     
     # If still processing, show cancel button
     if processing:
-        buttons.append([InlineKeyboardButton("Cancel", callback_data=f"cancel_dl")])
-    else:
-        # Download completed, show format selection if applicable
-        if download_info and download_info.success:
-            if download_info.ext in FORMATS['video']:
-                # For videos, offer conversion to audio
-                buttons.append([InlineKeyboardButton("Extract Audio", callback_data=f"convert_audio")])
+        buttons.append([InlineKeyboardButton("✘ Cancel", callback_data=f"cancel_dl")])
+    # else:
+    #     # Download completed, show format selection if applicable
+    #     if download_info and download_info.success:
+    #         if download_info.ext in FORMATS['video']:
+    #             # For videos, offer conversion to audio
+    #             buttons.append([InlineKeyboardButton("❀ Extract Audio", callback_data=f"convert_audio")])
             
-            # For all successful downloads, offer quality options if video
-            if download_info.ext in FORMATS['video']:
-                buttons.append([
-                    InlineKeyboardButton("Other Formats", callback_data=f"show_formats")
-                ])
+    #         # For all successful downloads, offer quality options if video
+    #         if download_info.ext in FORMATS['video']:
+    #             buttons.append([
+    #                 InlineKeyboardButton("❀ Other Formats", callback_data=f"show_formats")
+    #             ])
     
     return InlineKeyboardMarkup(buttons)
 
@@ -140,16 +140,16 @@ async def handle_cancel_download(client: Client, callback_query: CallbackQuery):
                 await download_progress[chat_id][message_id]['cancel_callback']()
                 await callback_query.answer("Download cancelled")
                 await callback_query.message.edit_text(
-                    "Download cancelled by user",
+                    "♔ Download cancelled by user",
                     reply_markup=InlineKeyboardMarkup([[
-                        InlineKeyboardButton("Try Again", callback_data="retry_download")
+                        InlineKeyboardButton("❀ Try Again", callback_data="retry_download")
                     ]])
                 )
             except Exception as e:
                 logger.error(f"Error cancelling download: {e}")
-                await callback_query.answer("Failed to cancel download", show_alert=True)
+                await callback_query.answer("⚠ Failed to cancel download", show_alert=True)
         else:
-            await callback_query.answer("This download cannot be cancelled", show_alert=True)
+            await callback_query.answer("⚠ This download cannot be cancelled", show_alert=True)
     else:
         # Remove from queue if it's queued
         removed = False
@@ -161,8 +161,8 @@ async def handle_cancel_download(client: Client, callback_query: CallbackQuery):
                     break
         
         if removed:
-            await callback_query.answer("Download removed from queue")
-            await callback_query.message.edit_text("Download cancelled from queue")
+            await callback_query.answer("♔ Download removed from queue")
+            await callback_query.message.edit_text("♔ Download cancelled from queue")
         else:
             await callback_query.answer("No active download to cancel", show_alert=True)
 
@@ -190,7 +190,7 @@ async def video_handler(client: Client, message: Message):
     # Extract URL first
     match = re.search(URL_REGEX, message.text or "")
     if not match:
-        await message.reply_text("No valid link found in your message.")
+        await message.reply_text("⚠ No valid link found in your message.")
         return
     link = match.group(0)
     sanitized_link = html.escape(link)
@@ -200,10 +200,11 @@ async def video_handler(client: Client, message: Message):
         # Check queue size limit
         if chat_id in download_queue and len(download_queue[chat_id]) >= MAX_QUEUE_SIZE:
             await message.reply_text(
-                f"Queue limit reached ({MAX_QUEUE_SIZE} items). Please try again later.",
+                f"⚠ Queue limit reached ({MAX_QUEUE_SIZE} items). Please try again later.",
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton("Why", callback_data="queue_info")
-                ]])
+                ]]),
+                disable_web_page_preview = True,
             )
             return
             
@@ -220,7 +221,8 @@ async def video_handler(client: Client, message: Message):
             f"** Link **: {sanitized_link[:50]}{'...' if len(link) > 50 else ''}",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("Cancel", callback_data="cancel_dl")
-            ]])
+            ]]),
+            disable_web_page_preview = True,
         )
         
         # Register in progress tracking
@@ -273,7 +275,8 @@ async def video_handler(client: Client, message: Message):
                     await msg.edit_text(
                         f"{progress_text}\n\n** Link **: {sanitized_link[:50]}{'...' if len(link) > 50 else ''}",
                         reply_markup=get_callback_keyboard(link, processing=True),
-                        parse_mode=ParseMode.MARKDOWN
+                        parse_mode=ParseMode.MARKDOWN,
+                        disable_web_page_preview = True
                     )
                     last_update_time = now
                 except Exception as e:
@@ -307,7 +310,8 @@ async def video_handler(client: Client, message: Message):
                 f"Download failed: {error_msg}",
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton("Try Again", callback_data="retry_download")
-                ]])
+                ]]),
+                disable_web_page_preview = True,
             )
             return
 
@@ -329,18 +333,14 @@ async def video_handler(client: Client, message: Message):
         
         # Prepare caption with metadata
         caption = (
-            f"** {html.escape(download_info.title)} **\n\n"
-            f"** Format **: {ext.upper()}\n"
-            f"** Size **: {format_size(filesize)}\n"
+            f"≡ **__{html.escape(title)}__ **\n\n"
+            f"♚ **Format **: __{ext.upper()}__\n"
+            f"✿ **Size **: __{format_size(filesize)}__\n"
         )
-        
-        if duration:
-            caption += f"** Duration **: {str(timedelta(seconds=int(duration)))}\n"
-        
         if performer:
-            caption += f"** Creator **: {html.escape(performer)}\n"
+            caption += f"♚ ** Creator **: __{html.escape(performer)}__\n"
         
-        caption += f"\nDownloaded via @{(await client.get_me()).username}"
+        caption += f"\n__via__ @{(await client.get_me()).username}"
         
         # Upload based on file type
         if file_type == 'audio':
@@ -378,26 +378,17 @@ async def video_handler(client: Client, message: Message):
         # Success message and clean up progress message
         await msg.delete()
         
-        # Send a confirmation message
-        elapsed_time = time.time() - download_progress[chat_id][msg.id].get('start_time', time.time())
-        await message.reply_text(
-            f"Successfully downloaded and uploaded in {humanize.naturaldelta(elapsed_time)}",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("Get Another Link", callback_data="get_another")
-            ]])
-        )
-
     except asyncio.CancelledError:
         logger.info(f"Download cancelled for chat {chat_id}")
         if msg:
-            await msg.edit_text("Download cancelled")
+            await msg.edit_text("♔ Download cancelled")
     except Exception as e:
         logger.error(f"Error in video_handler for chat {chat_id}: {e}")
         if msg:
             await msg.edit_text(
-                f"An error occurred: {str(e)}",
+                f"♔ An error occurred: {str(e)}",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Try Again", callback_data="retry_download")
+                    InlineKeyboardButton("✿ Try Again", callback_data="retry_download")
                 ]])
             )
     finally:
@@ -419,15 +410,6 @@ async def video_handler(client: Client, message: Message):
 
         # Process next in queue
         await process_next_in_queue(client, chat_id)
-
-@Client.on_callback_query(filters.regex(r'^get_another$'))
-async def handle_get_another(client: Client, callback_query: CallbackQuery):
-    """Handle request for downloading another link"""
-    await callback_query.answer("Please send another link to download")
-    await callback_query.message.edit_text(
-        "Please send another link to download",
-        reply_markup=None
-    )
 
 @Client.on_callback_query(filters.regex(r'^queue_info$'))
 async def handle_queue_info(client: Client, callback_query: CallbackQuery):
