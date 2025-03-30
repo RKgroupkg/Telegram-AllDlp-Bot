@@ -72,7 +72,7 @@ DOWNLOAD_RATE_LIMITER = RateLimiter(
 
 # Download callback operation rate limiter
 DOWNLOAD_CALLBACK_RATE_LIMITER = RateLimiter(
-    limit_sec=1,
+    limit_sec=3,
     limit_min=15,
     interval_sec=1,
     interval_min=60
@@ -215,7 +215,7 @@ async def check_download_callback_rate_limit(_, __, update: CallbackQuery) -> bo
 
     if is_callback_limited:
         await update.answer(
-           "Action limit reached. Please try again in a few minutes.",
+           "Calm down! Action limit reached. Please try again.You might need to wait.",
             show_alert=True
         )
         logger.info(f"Download callback rate limit hit for chat: {chat_id}")

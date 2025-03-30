@@ -27,6 +27,12 @@ To download Spotify tracks or songs.
 ◇  You can directly provide the link.  
 ◇  You can also use the inline feature for this.
 </i>
+<b>/dl</b>  
+<i>To download any link (except yt.).  
+◇  You can directly provide the link.  
+◇  supports 2k+ sites.
+ 
+
 """
 USER_TEXT = """
 ━━━〔 Utils Cmd Doc 〕━━━

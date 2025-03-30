@@ -94,7 +94,7 @@ async def youtube_callback_handler(client: Client, callback_query: CallbackQuery
     await handle_youtube_callback(client, callback_query)
 
 # Command to show statistics about the YouTube downloader
-@Client.on_message(filters.command(["ytstats"]),is_rate_limited)
+@Client.on_message(filters.command(["ytstats"])& is_rate_limited)
 async def yt_stats_command(client: Client, message: Message):
     """Show statistics about the YouTube downloader"""
     from src.helpers.dlp.yt_dl.catch import callback_cache, video_info_cache
