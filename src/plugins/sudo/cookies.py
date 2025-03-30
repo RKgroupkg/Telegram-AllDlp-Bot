@@ -33,8 +33,9 @@ async def shell_executor(_, message: Message):
 
         result = await save_all_cookies(args)
         new_cookie_count = await cookie_manager.refresh_cookies()
+        cookies_text = ',\n'.join(result)  # Ensures proper handling
         msg = await msg.edit_text(
-            f"♔ **The cookies saved to:** __{',\n'.join(result)}__\n\n♔ **The total Cookies now is:** __{new_cookie_count}__\n\n use `/shell ls cookies`to verify it."
+            f"""♔ **The cookies saved to:** __{cookies_text}__\n\n♔ **The total Cookies now is:** __{new_cookie_count}__ \n\n use `/shell ls cookies`to verify it."""
         )
     except Exception as error:
         LOGGER(__name__).warning(f"{error}")
