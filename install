@@ -114,6 +114,68 @@ install_ffmpeg() {
     fi
 }
 
+
+move_cookie_files() {
+    # Define colors for output
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[0;33m'
+    BLUE='\033[0;34m'
+    BOLD='\033[1m'
+    NC='\033[0m' # No Color
+    
+    # Count variables
+    found_count=0
+    moved_count=0
+    
+    # Create cookies directory if it doesn't exist
+    if [ ! -d "cookies" ]; then
+        echo -e "${YELLOW}${BOLD}Creating cookies directory...${NC}"
+        mkdir -p cookies
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}${BOLD}ERROR: Failed to create cookies directory!${NC}"
+            return 1
+        fi
+        echo -e "${GREEN}Created cookies directory successfully.${NC}"
+    fi
+    
+    # Find and process cookie files
+    echo -e "${BLUE}${BOLD}Searching for cookie files...${NC}"
+    
+    # Using find to locate files and process them with a loop
+    while IFS= read -r file; do
+        if [[ -f "$file" ]]; then
+            ((found_count++))
+            echo -e "${GREEN}Found:${NC} ${BOLD}$file${NC}"
+            
+            # Move the file to cookies directory
+            mv "$file" cookies/
+            if [ $? -eq 0 ]; then
+                ((moved_count++))
+                echo -e "${BLUE}Moved:${NC} ${file} → ${BOLD}cookies/${file}${NC}"
+            else
+                echo -e "${RED}${BOLD}ERROR: Failed to move ${file}!${NC}"
+            fi
+        fi
+    done < <(find . -maxdepth 1 -type f -name "cookie_*.txt" -o -name "cookies_*.txt" | sort -V)
+    
+    # Summary
+    echo
+    if [ $found_count -eq 0 ]; then
+        echo -e "${YELLOW}${BOLD}No cookie files found.${NC}"
+    else
+        echo -e "${GREEN}${BOLD}Summary:${NC}"
+        echo -e "${BOLD}Found:${NC} $found_count cookie files"
+        echo -e "${BOLD}Moved:${NC} $moved_count files to cookies directory"
+        
+        if [ $found_count -ne $moved_count ]; then
+            echo -e "${RED}${BOLD}WARNING:${NC} Some files could not be moved!"
+        else
+            echo -e "${GREEN}${BOLD}SUCCESS:${NC} All files moved successfully!"
+        fi
+    fi
+}
+
 # Main installation process
 main() {
     echo -e "${YELLOW}Starting installation process...${NC}"
@@ -137,6 +199,9 @@ main() {
     }
 
     echo -e "${GREEN}Installation completed successfully!${NC}"
+
+    move_cookie_files
+    
 }
 
 # Run the main function
