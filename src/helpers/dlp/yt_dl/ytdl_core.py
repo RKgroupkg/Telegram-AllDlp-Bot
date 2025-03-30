@@ -353,7 +353,7 @@ async def fetch_youtube_info(video_id: str) -> Optional[SearchInfo]:
         formats = formats,
         all_formats = formats,
         video_formats = video_formats,
-        udio_formats = audio_formats,
+        audio_formats = audio_formats,
         combined_formats = combined_formats
 
     )
@@ -413,7 +413,8 @@ async def download_youtube_video(
         ydl_opts["postprocessors"] = [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'flac', 'preferredquality': '693'}]
     elif bestVideo:
         # Specific options for bestVideo
-        ydl_opts['format'] ='bestvideo+bestaudio/best[ext=mp4]/best'
+        ydl_opts['format'] ='bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
+        ydl_opts['merge_output_format'] = 'mp4'  # Ensure merged output is MP4
     else:
         # Default case
         ydl_opts['format'] = format_id

@@ -7,7 +7,6 @@ import uuid
 import aiohttp
 import asyncio
 from typing import Optional, Tuple, Dict
-from functools import lru_cache
 
 from src.logging import LOGGER
 logger = LOGGER(__name__)
@@ -29,7 +28,7 @@ class ThumbnailManager:
         """Ensure cache directory exists"""
         os.makedirs(self.cache_dir, exist_ok=True)
     
-    @lru_cache(maxsize=10)
+
     async def get_thumbnail(self, thumbnail_url: Optional[str]) -> Tuple[bool, Optional[str]]:
         """
         Downloads a thumbnail, caches it, and returns the filepath.

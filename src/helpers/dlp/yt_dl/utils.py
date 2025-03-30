@@ -28,7 +28,7 @@ def extract_video_id(text: str) -> Optional[str]:
         return match.group(1)
     return None
 
-def generate_format_buttons(formats: List[Dict[str, Any]], page: int = 0, items_per_page: int = 5) -> List[List[InlineKeyboardButton]]:
+def generate_format_buttons(formats: List[Dict[str, Any]],video_id:str=None, page: int = 0, items_per_page: int = 5) -> List[List[InlineKeyboardButton]]:
     """
     Generate paginated format selection buttons
     
@@ -42,6 +42,10 @@ def generate_format_buttons(formats: List[Dict[str, Any]], page: int = 0, items_
     """
     if not formats:
         return []
+    
+    if items_per_page <= 0:
+        items_per_page = 5  # Default to 5 if an invalid value is provided
+    
     
     total_pages = (len(formats) + items_per_page - 1) // items_per_page
     start_idx = page * items_per_page
@@ -72,7 +76,7 @@ def generate_format_buttons(formats: List[Dict[str, Any]], page: int = 0, items_
         # Store format selection data in cache and get a callback ID
         format_data = {
             'type': 'format',
-            'video_id': formats[idx].get('video_id'),
+            'video_id': video_id,
             'format_id': fmt['format_id']
         }
         format_callback_id = store_callback_data(format_data)
@@ -217,16 +221,17 @@ def generate_format_buttons(formats: List[Dict[str, Any]], page: int = 0, items_
     
     return buttons
 
-def create_format_selection_markup(formats: List[Dict[str, Any]], page: int = 0) -> InlineKeyboardMarkup:
+def create_format_selection_markup(formats: List[Dict[str, Any]], video_id: str = None, page: int = 0) -> InlineKeyboardMarkup:
     """
     Create an InlineKeyboardMarkup for format selection
     
     Args:
         formats: List of format dictionaries
+        video_id: The video ID (if not present in formats)
         page: Current page number
         
     Returns:
         InlineKeyboardMarkup
     """
-    buttons = generate_format_buttons(formats, page)
+    buttons = generate_format_buttons(formats=formats, video_id=video_id, page=page)
     return InlineKeyboardMarkup(buttons)

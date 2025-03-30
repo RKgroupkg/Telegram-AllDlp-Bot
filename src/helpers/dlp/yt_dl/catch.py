@@ -3,15 +3,12 @@ import time
 import threading
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, Tuple, Union
-
-
+from typing import Dict, Any, Optional, Tuple, Union, List
 
 from .dataclass import (
     DownloadInfo,
     SearchInfo,
 )
-
 
 # Configuration constants
 CACHE_EXPIRY_HOURS = 1  # Cache expiry time in hours
@@ -131,21 +128,51 @@ def get_callback_data(callback_id: str) -> Optional[Dict[str, Any]]:
     logger.debug(f"Retrieved callback data: {callback_id}")
     return cache_item['data']
 
-def add_video_info_to_cache(video_id: str, info: Union[Dict[str, Any], SearchInfo]) -> None:
+def add_video_info_to_cache(video_id: str, info: Union[Dict[str, Any], 'SearchInfo', 'DownloadInfo']) -> None:
     """
     Add video information to cache
     
     Args:
         video_id: YouTube video ID
-        info: Video information (dict or SearchInfo object)
+        info: Video information (dict, SearchInfo, or DownloadInfo object)
     """
-    # Convert to dict if it's a SearchInfo object, otherwise use as-is
-    cache_info = info.dict() if isinstance(info, SearchInfo) else info.copy()
+    # Import here to avoid circular imports
+    from .dataclass import SearchInfo, DownloadInfo
+    
+    # Store the original type for later reconstruction
+    original_type = None
+    
+    # Convert to dict if it's a Pydantic model, otherwise use as-is
+    if isinstance(info, (SearchInfo, DownloadInfo)):
+        original_type = info.__class__.__name__
+        
+        # Use model_dump with by_alias=True and exclude_none=False to ensure all fields are included
+        cache_info = info.model_dump(by_alias=True, exclude_none=False)
+        
+        # Debug log the list attributes
+        if isinstance(info, SearchInfo):
+            logger.debug(f"SearchInfo lists before caching - all_formats: {len(info.all_formats) if info.all_formats else 0}, " +
+                        f"video_formats: {len(info.video_formats) if info.video_formats else 0}, " +
+                        f"audio_formats: {len(info.audio_formats) if info.audio_formats else 0}, " +
+                        f"combined_formats: {len(info.combined_formats) if info.combined_formats else 0}")
+    else:
+        cache_info = info.copy()
+    
+    # Add metadata
     cache_info['cached_at'] = datetime.now()
+    if original_type:
+        cache_info['_model_type'] = original_type
+    
+    # Ensure list attributes are preserved (not None)
+    if original_type == 'SearchInfo':
+        for list_attr in ['formats', 'all_formats', 'video_formats', 'audio_formats', 'combined_formats']:
+            if list_attr in cache_info and cache_info[list_attr] is None:
+                cache_info[list_attr] = []  # Use empty list instead of None
+    
     video_info_cache.set(video_id, cache_info)
-    logger.debug(f"Added video info to cache: {video_id}")
+    logger.debug(f"Added video info to cache: {video_id}, type: {original_type or 'dict'}")
 
-def get_video_info_from_cache(video_id: str) -> Optional[Dict[str, Any]]:
+def get_video_info_from_cache(video_id: str) -> Optional[Union[Dict[str, Any], 'SearchInfo', 'DownloadInfo']]:
     """
     Get video information from cache
     
@@ -153,7 +180,7 @@ def get_video_info_from_cache(video_id: str) -> Optional[Dict[str, Any]]:
         video_id: YouTube video ID
         
     Returns:
-        Video information or None if not in cache or expired
+        Video information as original Pydantic model or dict, or None if not in cache or expired
     """
     info = video_info_cache.get(video_id)
     
@@ -168,9 +195,50 @@ def get_video_info_from_cache(video_id: str) -> Optional[Dict[str, Any]]:
         logger.debug(f"Video info expired: {video_id}")
         return None
     
-    # Return a copy to prevent modification of cached data
+    # Make a copy to prevent modification of cached data
+    info_copy = info.copy()
+    
+    # Check if it was a Pydantic model and convert back to the right type
+    model_type = info_copy.pop('_model_type', None)
+    
+    if model_type:
+        # Remove metadata fields before converting back to Pydantic model
+        if 'cached_at' in info_copy:
+            del info_copy['cached_at']
+        
+        # Import here to avoid circular imports
+        from .dataclass import SearchInfo, DownloadInfo
+        
+        # Ensure list attributes are preserved for SearchInfo
+        if model_type == 'SearchInfo':
+            for list_attr in ['formats', 'all_formats', 'video_formats', 'audio_formats', 'combined_formats']:
+                if list_attr not in info_copy or info_copy[list_attr] is None:
+                    info_copy[list_attr] = []
+        
+        # Convert back to the original model type
+        try:
+            if model_type == 'SearchInfo':
+                result = SearchInfo(**info_copy)
+
+                logger.debug(f"SearchInfo lists after retrieval - all_formats: {len(result.all_formats) if result.all_formats else 0}, " +
+                            f"video_formats: {len(result.video_formats) if result.video_formats else 0}, " +
+                            f"audio_formats: {len(result.audio_formats) if result.audio_formats else 0}, " +
+                            f"combined_formats: {len(result.combined_formats) if result.combined_formats else 0}")
+            elif model_type == 'DownloadInfo':
+                result = DownloadInfo(**info_copy)
+            else:
+                # Unknown model type, fall back to dict
+                logger.warning(f"Unknown model type '{model_type}' for video ID: {video_id}")
+                result = info_copy
+                
+            logger.debug(f"Retrieved video info from cache: {video_id}, reconstructed as {model_type}")
+            return result
+        except Exception as e:
+            logger.error(f"Error reconstructing {model_type} from cache: {str(e)}")
+            return info_copy  # Fall back to returning the dict
+    
     logger.debug(f"Retrieved video info from cache: {video_id}")
-    return info.copy()
+    return info_copy
 
 def clear_video_info_cache() -> int:
     """

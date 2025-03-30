@@ -1,5 +1,6 @@
 import os
 import time
+import json
 import asyncio
 from datetime import timedelta
 import traceback
@@ -28,6 +29,11 @@ from .catch import (
 )
 from .utils import extract_video_id, create_format_selection_markup
 from src.helpers.dlp._Thumb.thumbnail import download_and_verify_thumbnail,delete_thumbnail
+
+
+from .dataclass import (
+    SearchInfo,
+)
 
 from src.logging import LOGGER
 logger = LOGGER(__name__)
@@ -233,15 +239,15 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
                 await callback_query.answer("⚠ Video information not available anymore.", show_alert=True)
                 return
             
-            duration_str = str(timedelta(seconds=info['duration']))
+            duration_str = str(timedelta(seconds=info.duration))
             # Enhanced info display
             info_text = (
-                f"♔ *Title*: __{info['title'][:30]}...__\n"
+                f"♔ *Title*: __{info.title[:30]}...__\n"
                 f"✿ *Duration*: __{duration_str}__\n"
-                f"♚ *Uploader*: __{info['uploader']}__\n"
-                f"✦ *Views*: __{beautify_views(int(info.get('view_count', 'N/A')))}__"
-                f"[​]({info.get('thumbnail')})\n"
-                f"۞ *Upload Date*: __{info.get('upload_date', 'N/A')}__"
+                f"♚ *Uploader*: __{info.uploader}__\n"
+                f"✦ *Views*: __{beautify_views(int(info.view_count))}__"
+                f"[​]({info.thumbnail})\n"
+                f"۞ *Upload Date*: __{info.upload_date}__"
             )
             await callback_query.answer(info_text, show_alert=True)
             return
@@ -261,15 +267,18 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
                 await callback_query.answer("⚠ Video information not available anymore.", show_alert=True)
                 return
             
+            formats ={}
             if filter_type == "all":
-                info['formats'] = info['all_formats']
+                formats = info.all_formats
             elif filter_type == "video":
-                info['formats'] = info['combined_formats'] + info['video_formats']
+                formats = info.combined_formats + info.video_formats
             elif filter_type == "audio":
-                info['formats'] = info['audio_formats']
-            
-            markup = create_format_selection_markup(info['formats'], page=page)
-            
+                formats = info.audio_formats
+
+
+                
+            markup = create_format_selection_markup(formats, video_id=video_id, page=page)
+
             try:
                 await message.edit_reply_markup(reply_markup=markup)
             except MessageNotModified:
@@ -286,7 +295,7 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
                 await callback_query.answer("⚠ Video information not available anymore.", show_alert=True)
                 return
             
-            markup = create_format_selection_markup(info['formats'], page=page)
+            markup = create_format_selection_markup(info.formats, page=page)
             
             try:
                 await message.edit_reply_markup(reply_markup=markup)
@@ -375,7 +384,7 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
             
             # Find selected format
             selected_format = None
-            for fmt in info['formats']:
+            for fmt in info.formats:
                 if fmt['format_id'] == format_id:
                     selected_format = fmt
                     break
@@ -395,9 +404,9 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
                 size_mb = file_size / (1024 * 1024)
                 await message.edit_text(
                     f"⚠ Warning: This file is large ({size_mb:.1f}MB).\n\n"
-                    f"♔ Title: {info['title']}\n"
+                    f"♔ Title: {info.title}\n"
                     f"✤ Format: {selected_format.get('height', 'Audio')}p {selected_format.get('ext', '')}\n"
-                    f"[​]({info.get('thumbnail')})\n"
+                    f"[​]({info.thumbnail})\n"
                     f"Do you want to proceed with the download?",
                     reply_markup=confirm_markup
                 )
@@ -425,7 +434,7 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
             
             # Find selected format
             selected_format = None
-            for fmt in info['formats']:
+            for fmt in info.formats:
                 if fmt['format_id'] == format_id:
                     selected_format = fmt
                     break
@@ -468,7 +477,7 @@ async def handle_youtube_callback(client: Client, callback_query: CallbackQuery)
         except:
             pass
 
-async def start_download(client : Client, callback_query, message, video_id, format_id, info, selected_format):
+async def start_download(client : Client, callback_query, message, video_id, format_id, info:SearchInfo, selected_format):
     """Helper function to start a download with progress tracking"""
     user_id = callback_query.from_user.id
     
@@ -502,9 +511,9 @@ async def start_download(client : Client, callback_query, message, video_id, for
     ])
     
     await message.edit_text(
-        f"⟳ Preparing to download: **{info['title']}**\n\n"
+        f"⟳ Preparing to download: **{info.title}**\n\n"
         f"✤ Format: {format_info}"
-        f"[​]({info.get('thumbnail')})\n"
+        f"[​]({info.thumbnail})\n"
         f"Status: Initializing...",
         reply_markup=cancel_markup
     )
@@ -574,7 +583,7 @@ async def start_download(client : Client, callback_query, message, video_id, for
                     await message.edit_text(
                         f"{progress_text}\n"
                         f"∿ Speed: {speed_text} | ETA: {eta_text}\n\n"
-                        f"≡ __{info['title']}__",
+                        f"≡ __{info.title}__",
                         reply_markup=cancel_markup
                     )
                 except (MessageNotModified, FloodWait) as e:
@@ -704,7 +713,7 @@ async def start_download(client : Client, callback_query, message, video_id, for
         error_trace = traceback.format_exc()
         logger.error(f"Error handling YouTube download: {e}\n{error_trace}")
         await message.edit_text(f"✖  An error occurred during download: {str(e)}")
-        process_next_in_queue(client, user_id, message)
+        await process_next_in_queue(client, user_id, message)
 
 
 async def process_next_in_queue(client, user_id, message):
@@ -729,7 +738,7 @@ async def process_next_in_queue(client, user_id, message):
                 
             # Find selected format
             selected_format = None
-            for fmt in info['formats']:
+            for fmt in info.formats:
                 if fmt['format_id'] == format_id:
                     selected_format = fmt
                     break
