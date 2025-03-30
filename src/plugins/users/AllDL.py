@@ -359,6 +359,22 @@ async def handle_queue_info(client: Client, callback_query: CallbackQuery):
 
 # Main download handler
 @Client.on_message(ytdlp_url & Main_dlURl & filters.incoming & filters.text & is_ratelimiter_dl)
+
+
+
+# Main download handler for direct messages
+@Client.on_message(ytdlp_url & Main_dlURl & filters.text & is_ratelimiter_dl)
+async def text_msg_handler(client: Client, message: Message):
+    """Handle video/media download requests from URLs"""
+    await video_handler(client, message)
+
+# Handler for /dl command
+@Client.on_message(filters.command("dl") & ytdlp_url & filters.incoming & filters.text & is_ratelimiter_dl)
+async def dl_command_handler(client: Client, message: Message):
+    """Handle download requests through the /dl command"""
+    await video_handler(client, message)
+
+
 async def video_handler(client: Client, message: Message):
     """Handle video/media download requests from URLs"""
     chat_id = message.chat.id

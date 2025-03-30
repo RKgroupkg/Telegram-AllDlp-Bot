@@ -15,11 +15,13 @@ from src.helpers.dlp._util import (
 from .ytdl_core import (
     fetch_youtube_info,
     download_youtube_video,
-    format_progress,
     clean_temporary_file,
     MAX_VIDEO_LENGTH_MINUTES,
     beautify_views
 )
+
+from src.helpers.dlp._yt_dlp import  format_progress,DownloadTracker
+
 from .catch import (
     get_callback_data, get_video_info_from_cache, add_video_info_to_cache,
     clear_video_info_cache, clean_expired_cache
