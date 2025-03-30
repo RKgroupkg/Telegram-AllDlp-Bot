@@ -4,21 +4,17 @@
 #
 #
 
-import os
 import asyncio
+import os
 from io import BytesIO
 
 from pyrogram import filters
-from pyrogram.types import (
-    Message,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
-    CallbackQuery,
-)
+from pyrogram.types import (CallbackQuery, InlineKeyboardButton,
+                            InlineKeyboardMarkup, Message)
 
 from src import bot
-from src.logging import LOGGER
 from src.helpers.filters import dev_cmd
+from src.logging import LOGGER
 
 
 @bot.on_callback_query(filters.regex("shellcallback_"))

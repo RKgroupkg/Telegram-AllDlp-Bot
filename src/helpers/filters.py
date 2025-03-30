@@ -12,18 +12,17 @@ smooth operation within Telegram's rate limitations.
 
 import re
 import time
-import functools
-from typing import Union, List, Dict, Any, Callable, Optional
+from typing import Callable, Dict, List, Union
 from urllib.parse import urlparse
 
+import yt_dlp
 from pyrogram import filters
 from pyrogram.enums import ChatType
-from pyrogram.types import Message, CallbackQuery
-import yt_dlp
+from pyrogram.types import CallbackQuery, Message
 
-from src.helpers.ratelimiter import RateLimiter
-from src.config import SUDO_USERID, OWNER_USERID
+from src.config import OWNER_USERID, SUDO_USERID
 from src.helpers.dlp._rex import LINK_REGEX_PATTERNS
+from src.helpers.ratelimiter import RateLimiter
 from src.logging import LOGGER
 
 logger = LOGGER(__name__)

@@ -5,16 +5,16 @@
 #
 
 import os
-import time
 import shutil
-import psutil
+import time
 from datetime import datetime
+
+import psutil
 from PIL import Image, ImageDraw, ImageFont
-
 from pyrogram import filters
-from pyrogram.types import Message, InputMediaPhoto
+from pyrogram.types import InputMediaPhoto, Message
 
-from src import bot, BotStartTime
+from src import BotStartTime, bot
 from src.helpers.functions import get_readable_bytes, get_readable_time
 
 

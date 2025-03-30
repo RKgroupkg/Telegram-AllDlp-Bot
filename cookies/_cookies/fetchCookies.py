@@ -5,10 +5,11 @@
 #
 
 import asyncio
+import base64
 import os
 import uuid
 from urllib.parse import urlparse
-import base64
+
 import aiofiles
 import aiohttp
 

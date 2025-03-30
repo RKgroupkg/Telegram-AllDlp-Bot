@@ -2,11 +2,12 @@
 # Quick Dl is an open-source Downloader bot licensed under MIT.
 # All rights reserved where applicable.
 
+import asyncio
 import os
 import uuid
+from typing import Dict, Optional, Tuple
+
 import aiohttp
-import asyncio
-from typing import Optional, Tuple, Dict
 
 from src.logging import LOGGER
 

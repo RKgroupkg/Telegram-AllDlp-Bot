@@ -1,14 +1,11 @@
-import uuid
-import time
-import threading
 import logging
+import threading
+import time
+import uuid
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, Tuple, Union, List
+from typing import Any, Dict, Optional, Tuple, Union
 
-from .dataclass import (
-    DownloadInfo,
-    SearchInfo,
-)
+from .dataclass import DownloadInfo, SearchInfo
 
 # Configuration constants
 CACHE_EXPIRY_HOURS = 1  # Cache expiry time in hours
@@ -146,7 +143,7 @@ def add_video_info_to_cache(
         info: Video information (dict, SearchInfo, or DownloadInfo object)
     """
     # Import here to avoid circular imports
-    from .dataclass import SearchInfo, DownloadInfo
+    from .dataclass import DownloadInfo, SearchInfo
 
     # Store the original type for later reconstruction
     original_type = None
@@ -229,7 +226,7 @@ def get_video_info_from_cache(
             del info_copy["cached_at"]
 
         # Import here to avoid circular imports
-        from .dataclass import SearchInfo, DownloadInfo
+        from .dataclass import DownloadInfo, SearchInfo
 
         # Ensure list attributes are preserved for SearchInfo
         if model_type == "SearchInfo":

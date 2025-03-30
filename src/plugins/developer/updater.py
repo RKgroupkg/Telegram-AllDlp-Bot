@@ -11,8 +11,8 @@ from pyrogram import filters
 from pyrogram.types import Message
 
 from src import bot
-from src.logging import LOGGER
 from src.helpers.filters import dev_cmd
+from src.logging import LOGGER
 
 
 @bot.on_message(filters.command("update") & dev_cmd)

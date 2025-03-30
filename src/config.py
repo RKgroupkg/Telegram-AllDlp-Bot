@@ -4,15 +4,15 @@
 #
 #
 
-import json
-import os
 import asyncio
-from typing import Optional
+import json
 from os import getenv
 from pathlib import Path
-from dotenv import load_dotenv
-from src.logging import LOGGER
+from typing import Optional
 
+from dotenv import load_dotenv
+
+from src.logging import LOGGER
 
 logger = LOGGER(__name__)
 
@@ -122,7 +122,7 @@ try:
     if sudo_users:
         SUDO_USERID += sudo_users
         logger.info("Added sudo user(s)")
-except Exception as error:
+except Exception:
     logger.info("No sudo user(s) mentioned in config.")
 
 # Ensure unique user IDs

@@ -1,39 +1,25 @@
-import os
-import time
-import random
 import asyncio
-import uuid
-import aiohttp
+import os
+import random
 import re
-
-import yt_dlp
 import threading
-from datetime import timedelta
-from typing import Dict, Any, Callable, Coroutine, Optional, List, Set, Union
-from .dataclass import (
-    DownloadInfo,
-    SearchInfo,
-    VideoSearchResult,
-    PlaylistSearchResult,
-)
-from yt_dlp.utils import ExtractorError, UnsupportedError
-from src.helpers.dlp._yt_dlp import (
-    download_pool,
-    cookie_manager,
-    DownloadTracker,
-)
+import uuid
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Union
 
+import aiohttp
+import yt_dlp
+
+from src.helpers.dlp._yt_dlp import (DownloadTracker, cookie_manager,
+                                     download_pool)
 from src.logging import LOGGER
+
+from .dataclass import (DownloadInfo, PlaylistSearchResult, SearchInfo,
+                        VideoSearchResult)
 
 logger = LOGGER(__name__)
 
-from src.config import (
-    COOKIE_ROTATION_COOLDOWN,  # seconds between using the same cookie file
-    DEFAULT_COOKIES_DIR,
-    YT_PROGRESS_UPDATE_INTERVAL,
-    CATCH_PATH,
-    MAX_VIDEO_LENGTH_MINUTES,
-)
+from src.config import (CATCH_PATH, DEFAULT_COOKIES_DIR,
+                        MAX_VIDEO_LENGTH_MINUTES)
 
 # Ensure download directory exists
 os.makedirs(CATCH_PATH, exist_ok=True)

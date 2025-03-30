@@ -4,34 +4,25 @@
 #
 #
 
-import re
 import asyncio
-from typing import List, Optional, Dict, Any
+import re
 import uuid
+from typing import Any, Dict, List, Optional
 
-from pyrogram import Client, filters, enums
-from pyrogram.types import (
-    Message,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
-    ChatPrivileges,
-    InputMediaPhoto,
-    InputMediaVideo,
-    InlineQuery,
-    InlineQueryResultArticle,
-    InlineQueryResultPhoto,
-    InlineQueryResultVideo,
-    InputTextMessageContent,
-)
-from src.helpers.filters import is_rate_limited, is_download_rate_limited
-from src.helpers.dlp.Insta_dl.insta_dl import get_instagram_post_data
-from src.helpers.decorators import catch_errors
+from pyrogram import Client, enums, filters
+from pyrogram.types import (ChatPrivileges, InlineKeyboardButton,
+                            InlineKeyboardMarkup, InlineQuery,
+                            InlineQueryResultArticle, InlineQueryResultPhoto,
+                            InlineQueryResultVideo, InputMediaPhoto,
+                            InputMediaVideo, InputTextMessageContent, Message)
 
 from src.config import RAPID_API_KEYS
+from src.helpers.decorators import catch_errors
+from src.helpers.dlp._rex import INSTAGRAM_URL_PATTERN
+from src.helpers.dlp.Insta_dl.insta_dl import get_instagram_post_data
+from src.helpers.filters import is_download_rate_limited, is_rate_limited
 from src.helpers.start_constants import BOT_NAME  # bot name
 from src.logging import LOGGER
-from src.helpers.dlp._rex import INSTAGRAM_URL_PATTERN
-
 
 # Cache for storing recently processed Instagram media (to avoid repeated API calls)
 MEDIA_CACHE = {}
@@ -174,7 +165,7 @@ async def instagram_downloader_handler(client: Client, message: Message) -> None
         # Prepare caption
         if message.chat.type == enums.ChatType.PRIVATE:
             # Case 1: Private chat
-            caption = f"≡ Instagram media\n\n"
+            caption = "≡ Instagram media\n\n"
             if media_data.get("caption"):
                 caption += f"Caption: <i>{media_data['caption'][:300]}</i>"
                 if len(media_data["caption"]) > 300:
@@ -198,7 +189,7 @@ async def instagram_downloader_handler(client: Client, message: Message) -> None
             if not only_instagram_link:
                 # Truncate original message if too long
                 original_text = message.text.replace(
-                    instagram_url, f" "
+                    instagram_url, " "
                 )  # <i><a href='{instagram_url}'>Video</a></i>
                 if len(original_text) > 200:
                     original_text = original_text[:97] + "..."
@@ -360,7 +351,7 @@ async def instagram_command_handler(client: Client, message: Message) -> None:
             return
 
         # Prepare caption
-        caption = f"≡ Instagram media\n\n"
+        caption = "≡ Instagram media\n\n"
         if media_data.get("caption"):
             caption += f"Caption: {media_data['caption'][:300]}"
             if len(media_data["caption"]) > 300:
@@ -608,7 +599,7 @@ async def instagram_inline_handler(client: Client, inline_query: InlineQuery) ->
                 result_id = str(uuid.uuid4())
 
                 # Basic caption without original caption to avoid issues
-                caption = f" "
+                caption = " "
 
                 # Add media item number if multiple items
                 if total_media_count > 1:

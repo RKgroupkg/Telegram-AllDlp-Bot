@@ -6,13 +6,13 @@
 
 import http.client
 import json
-import time
-import random
-
 import os
+import random
+import time
 from dataclasses import dataclass
-from typing import List, Dict, Optional, Union, Tuple, Any
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote
+
 from src.logging import LOGGER
 
 

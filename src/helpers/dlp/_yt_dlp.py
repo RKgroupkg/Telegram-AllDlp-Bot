@@ -1,21 +1,16 @@
 import asyncio
 import os
-from concurrent.futures import ThreadPoolExecutor
-import shutil
-from datetime import timedelta
 import random
-import time
+import shutil
 import tempfile
-from typing import Dict, Any, Callable, Coroutine, Optional
+import time
+from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
+from typing import Any, Callable, Coroutine, Dict, Optional
 
-
-from src.config import (
-    COOKIE_ROTATION_COOLDOWN,  # seconds between using the same cookie file
-    DEFAULT_COOKIES_DIR,
-    YT_PROGRESS_UPDATE_INTERVAL,
-)
-
-
+from src.config import \
+    COOKIE_ROTATION_COOLDOWN  # seconds between using the same cookie file
+from src.config import DEFAULT_COOKIES_DIR, YT_PROGRESS_UPDATE_INTERVAL
 from src.logging import LOGGER
 
 logger = LOGGER(__name__)

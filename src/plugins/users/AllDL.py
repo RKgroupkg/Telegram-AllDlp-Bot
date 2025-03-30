@@ -1,41 +1,28 @@
+import asyncio
+import html
 import os
 import re
 import time
-import asyncio
-import html
-from typing import Dict, Any, Optional, Callable, List, Tuple, Union
-from datetime import timedelta
-import contextlib
-from functools import wraps
 from enum import Enum, auto
+from functools import wraps
+from typing import Any, Dict, Optional
 
-from pyrogram import Client, filters, enums
-from pyrogram.types import (
-    Message,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
-    CallbackQuery,
-)
+from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
-from src.logging import LOGGER
-from src.helpers.filters import (
-    allowed_url,
-    is_download_rate_limited,
-    ytdlp_url,
-    is_download_callback_rate_limited,
-)
-from src.helpers.dlp._rex import URL_REGEX
-from src.helpers.dlp.yt_dl.ytdl_core import (
-    download_video_from_link,
-    clean_temporary_file,
-    DownloadInfo,
-)
-from src.helpers.dlp._util import format_size, format_time
-from src.helpers.dlp._Thumb.thumbnail import (
-    download_and_verify_thumbnail,
-    delete_thumbnail,
-)
+from pyrogram.types import (CallbackQuery, InlineKeyboardButton,
+                            InlineKeyboardMarkup, Message)
 
+from src.helpers.dlp._rex import URL_REGEX
+from src.helpers.dlp._Thumb.thumbnail import (delete_thumbnail,
+                                              download_and_verify_thumbnail)
+from src.helpers.dlp._util import format_size, format_time
+from src.helpers.dlp.yt_dl.ytdl_core import (DownloadInfo,
+                                             clean_temporary_file,
+                                             download_video_from_link)
+from src.helpers.filters import (allowed_url,
+                                 is_download_callback_rate_limited,
+                                 is_download_rate_limited, ytdlp_url)
+from src.logging import LOGGER
 
 logger = LOGGER(__name__)
 
@@ -251,7 +238,7 @@ def get_callback_keyboard(
 
     # If still processing or queued, show cancel button
     if processing or is_queued:
-        buttons.append([InlineKeyboardButton("✘ Cancel", callback_data=f"cancel_dl")])
+        buttons.append([InlineKeyboardButton("✘ Cancel", callback_data="cancel_dl")])
 
     # When completed, could add more options here in the future
     # if not processing and download_info and download_info.success:

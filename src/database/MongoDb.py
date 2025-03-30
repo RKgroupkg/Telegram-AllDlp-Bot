@@ -6,11 +6,11 @@
 
 import sys
 from typing import Union
+
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from src.logging import LOGGER
 from src.config import MONGO_URI
-
+from src.logging import LOGGER
 
 """
 from one String URI you can create multiple databases for different projects/bots.

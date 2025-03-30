@@ -46,7 +46,7 @@ async def telegraph_paste(content: str) -> str:
     try:
         response = await telegraph.create_page(title="src", html_content=html_content)
         response = response["url"]
-    except Exception as error:
+    except Exception:
         response = await katbin_paste(content)
 
     return response

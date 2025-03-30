@@ -4,10 +4,10 @@
 #
 #
 
-from src.helpers.filters import is_rate_limited
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from pyrogram.enums import ChatType
+
+from src.helpers.filters import is_rate_limited
 
 
 @Client.on_message(filters.command(["id"]) & is_rate_limited)

@@ -4,11 +4,12 @@
 #
 #
 
-from typing import Union
 from datetime import datetime
+from typing import Union
 
 from pyrogram.types import Message
-from src.database.MongoDb import users, chats
+
+from src.database.MongoDb import chats, users
 
 
 async def save_user(user: Message) -> None:

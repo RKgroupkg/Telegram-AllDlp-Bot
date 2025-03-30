@@ -3,16 +3,16 @@
 # All rights reserved where applicable.
 
 import os
+
 import aiofiles
 from pyrogram import filters
-from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
+
 from src import bot
-from src.helpers.filters import is_rate_limited, is_download_callback_rate_limited
-from src.helpers.pasting_services import (
-    katbin_paste,
-    telegraph_paste,
-    telegraph_image_paste,
-)
+from src.helpers.filters import (is_download_callback_rate_limited,
+                                 is_rate_limited)
+from src.helpers.pasting_services import (katbin_paste, telegraph_image_paste,
+                                          telegraph_paste)
 
 
 @bot.on_message(filters.command("paste") & is_rate_limited)

@@ -1,49 +1,27 @@
+import asyncio
 import os
 import time
-import json
-import asyncio
-from datetime import timedelta
 import traceback
-from requests import get
+from datetime import timedelta
 
 from pyrogram import Client
-from pyrogram.types import (
-    Message,
-    CallbackQuery,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
-)
-from pyrogram.errors import MessageNotModified, FloodWait
+from pyrogram.errors import FloodWait, MessageNotModified
+from pyrogram.types import (CallbackQuery, InlineKeyboardButton,
+                            InlineKeyboardMarkup, Message)
+
+from src.helpers.dlp._Thumb.thumbnail import (delete_thumbnail,
+                                              download_and_verify_thumbnail)
 from src.helpers.dlp._util import format_size, format_time
-from .ytdl_core import (
-    fetch_youtube_info,
-    download_youtube_video,
-    clean_temporary_file,
-    MAX_VIDEO_LENGTH_MINUTES,
-    beautify_views,
-)
-
-from src.helpers.dlp._yt_dlp import format_progress, DownloadTracker
-
-from .catch import (
-    get_callback_data,
-    get_video_info_from_cache,
-    add_video_info_to_cache,
-    clear_video_info_cache,
-    clean_expired_cache,
-)
-from .utils import extract_video_id, create_format_selection_markup
-from src.helpers.dlp._Thumb.thumbnail import (
-    download_and_verify_thumbnail,
-    delete_thumbnail,
-)
-
-
-from .dataclass import (
-    SearchInfo,
-)
-
+from src.helpers.dlp._yt_dlp import format_progress
 from src.logging import LOGGER
+
+from .catch import (add_video_info_to_cache, clean_expired_cache,
+                    get_callback_data, get_video_info_from_cache)
+from .dataclass import SearchInfo
+from .utils import create_format_selection_markup, extract_video_id
+from .ytdl_core import (MAX_VIDEO_LENGTH_MINUTES, beautify_views,
+                        clean_temporary_file, download_youtube_video,
+                        fetch_youtube_info)
 
 logger = LOGGER(__name__)
 
@@ -664,7 +642,7 @@ async def start_download(
                     active_downloads[user_id]["cancelled"] = True
                     try:
                         await message.edit_text(
-                            f"✖  Download stalled for too long. Cancelled automatically."
+                            "✖  Download stalled for too long. Cancelled automatically."
                         )
                     except:
                         pass
@@ -891,7 +869,7 @@ async def process_next_in_queue(client, user_id, message):
                 data=f"ytdl_{video_id}:{format_id}",
             )
 
-            await message.edit_text(f"⟳ Starting next download from queue...")
+            await message.edit_text("⟳ Starting next download from queue...")
             await start_download(
                 client,
                 fake_callback,
@@ -904,7 +882,7 @@ async def process_next_in_queue(client, user_id, message):
         else:
             # Just a video ID, need to show format selection
             video_id = next_item
-            await message.edit_text(f"⟳ Processing next video from queue...")
+            await message.edit_text("⟳ Processing next video from queue...")
 
             # Create a fake message to process the next download
             fake_message = Message(

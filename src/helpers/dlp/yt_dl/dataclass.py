@@ -4,9 +4,9 @@
 #
 #
 
-from typing import Optional, List, Literal, Dict, Any
-from pydantic import BaseModel, Field
-import os
+from typing import List, Literal, Optional
+
+from pydantic import BaseModel
 
 
 class DownloadInfo(BaseModel):

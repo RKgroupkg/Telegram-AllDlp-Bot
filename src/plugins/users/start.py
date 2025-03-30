@@ -6,31 +6,18 @@
 
 from pyrogram import filters
 from pyrogram.enums import ParseMode
-from pyrogram.types import (
-    CallbackQuery,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    Message,
-)
-from pyrogram.types import InputMediaPhoto
+from pyrogram.types import (CallbackQuery, InlineKeyboardButton,
+                            InlineKeyboardMarkup, InputMediaPhoto, Message)
 
 from src import bot
-from src.database import database
-from src.helpers.filters import is_rate_limited, is_download_callback_rate_limited
 from src.config import OWNER_USERID, SUDO_USERID
-from src.helpers.start_constants import (
-    START_CAPTION,
-    USER_TEXT,
-    COMMAND_CAPTION,
-    ABOUT_CAPTION,
-    DEV_TEXT,
-    SUDO_TEXT,
-    DLP_TEXT,
-    QUICKDL_BANNER,
-    QUICKDL_LOGO,
-    RKGROUP_LOGO,
-)
-
+from src.database import database
+from src.helpers.filters import (is_download_callback_rate_limited,
+                                 is_rate_limited)
+from src.helpers.start_constants import (ABOUT_CAPTION, COMMAND_CAPTION,
+                                         DEV_TEXT, DLP_TEXT, QUICKDL_BANNER,
+                                         RKGROUP_LOGO, START_CAPTION,
+                                         SUDO_TEXT, USER_TEXT)
 
 START_BUTTON = [
     [

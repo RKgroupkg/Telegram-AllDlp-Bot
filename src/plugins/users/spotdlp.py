@@ -5,30 +5,23 @@
 #
 
 import re
-from time import time
-from typing import Dict, Any, Optional, Tuple
+from typing import Any, Dict, Optional
 
 import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
 from pyrogram import filters
 from pyrogram.types import Message
+from spotipy.oauth2 import SpotifyClientCredentials
 
 from src import bot
-from src.helpers.filters import is_download_rate_limited
-from src.helpers.dlp.yt_dl.ytdl_core import search_youtube, fetch_youtube_info
-from src.helpers.dlp.yt_dl.utils import create_format_selection_markup
 from src.config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
-
-from src.helpers.dlp.yt_dl.dataclass import (
-    SearchInfo,
-)
-from src.helpers.dlp.yt_dl.catch import add_video_info_to_cache, clean_expired_cache
-
-from src.helpers.dlp._rex import (
-    SPOTIFY_ALBUM_REGEX,
-    SPOTIFY_PLAYLIST_REGEX,
-    SPOTIFY_TRACK_REGEX,
-)
+from src.helpers.dlp._rex import (SPOTIFY_ALBUM_REGEX, SPOTIFY_PLAYLIST_REGEX,
+                                  SPOTIFY_TRACK_REGEX)
+from src.helpers.dlp.yt_dl.catch import (add_video_info_to_cache,
+                                         clean_expired_cache)
+from src.helpers.dlp.yt_dl.dataclass import SearchInfo
+from src.helpers.dlp.yt_dl.utils import create_format_selection_markup
+from src.helpers.dlp.yt_dl.ytdl_core import fetch_youtube_info, search_youtube
+from src.helpers.filters import is_download_rate_limited
 
 # Initialize Spotify client
 spotify_client = None

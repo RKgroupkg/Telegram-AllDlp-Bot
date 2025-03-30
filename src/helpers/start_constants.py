@@ -1,5 +1,5 @@
-from src.version import __python_version__, __version__, __pyro_version__, __license__
-
+from src.version import (__license__, __pyro_version__, __python_version__,
+                         __version__)
 
 # Load images into memory once at startup
 QUICKDL_BANNER = "https://raw.githubusercontent.com/RKgroupkg/Telegram-AllDlp-Bot/refs/heads/main/src/helpers/assets/QuickDlBanner.jpg"
@@ -8,7 +8,7 @@ QUICKDL_LOGO = "https://raw.githubusercontent.com/RKgroupkg/Telegram-AllDlp-Bot/
 
 RKGROUP_LOGO = "https://raw.githubusercontent.com/RKgroupkg/Telegram-AllDlp-Bot/refs/heads/main/src/helpers/assets/RKgroupLogo.jpg"
 
-BOT_NAME = f"@Quick_dlbot"
+BOT_NAME = "@Quick_dlbot"
 DLP_TEXT = """
 
 <b>━━━〔 Dlp Cmd Doc 〕━━━</b>

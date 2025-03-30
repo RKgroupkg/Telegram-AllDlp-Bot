@@ -4,16 +4,15 @@
 #
 #
 
-from speedtest import Speedtest
-
 from pyrogram import filters
 from pyrogram.types import Message
+from speedtest import Speedtest
 
 from src import bot
-from src.logging import LOGGER
+from src.helpers.decorators import run_sync_in_thread
 from src.helpers.filters import sudo_cmd
 from src.helpers.functions import get_readable_bytes
-from src.helpers.decorators import run_sync_in_thread
+from src.logging import LOGGER
 
 
 @run_sync_in_thread
