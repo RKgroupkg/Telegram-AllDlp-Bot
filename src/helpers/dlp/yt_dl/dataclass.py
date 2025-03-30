@@ -4,14 +4,16 @@
 #
 #
 
-from typing import Optional ,List,Literal,Dict,Any
+from typing import Optional, List, Literal, Dict, Any
 from pydantic import BaseModel, Field
 import os
+
 
 class DownloadInfo(BaseModel):
     """
     Represents comprehensive download information with optional fields.
     """
+
     success: bool = True
     id: Optional[str] = None
     url: Optional[str] = None
@@ -27,8 +29,9 @@ class DownloadInfo(BaseModel):
 
 class SearchInfo(BaseModel):
     """
-    Info of video 
+    Info of video
     """
+
     success: bool = True
     id: Optional[str] = None
     title: Optional[str] = None
@@ -48,29 +51,30 @@ class SearchInfo(BaseModel):
 
 class PlaylistSearchResult(BaseModel):
     id: str
-    title: str = 'Unknown Playlist'
+    title: str = "Unknown Playlist"
     url: str
     thumbnail: Optional[str] = None
-    type: Literal['playlist'] = 'playlist'
+    type: Literal["playlist"] = "playlist"
     entries_count: int = 0
-    uploader: str = 'Unknown'
+    uploader: str = "Unknown"
 
 
 class VideoSearchResult(BaseModel):
     id: str
-    title: str = 'Unknown Title'
+    title: str = "Unknown Title"
     url: str
     thumbnail: Optional[str] = None
     duration: int = 0
     duration_string: str
-    uploader: str = 'Unknown'
-    uploader_id: str = 'Unknown'
-    description: str = ''
+    uploader: str = "Unknown"
+    uploader_id: str = "Unknown"
+    description: str = ""
     view_count: int = 0
     upload_date: str
-    type: Literal['video'] = 'video'
+    type: Literal["video"] = "video"
     live_status: Optional[str] = None
     exceeds_max_length: Optional[bool] = None
+
 
 # class CallBackData(BaseModel):
 #     type: Optional[str] = None

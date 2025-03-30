@@ -24,7 +24,9 @@ async def broadcast(_, message: Message):
         return await message.reply_text(broadcast_usage, quote=True)
 
     proses_msg = await message.reply_text(
-        "**Broadcasting started. Please wait for few minutes for it to get completed.", quote=True)
+        "**Broadcasting started. Please wait for few minutes for it to get completed.",
+        quote=True,
+    )
 
     to_chats = False
     to_users = False
@@ -60,7 +62,8 @@ async def broadcast(_, message: Message):
     for __id in total_list:
         try:
             await broadcast_msg.copy(
-                __id, broadcast_msg.caption, disable_notification=disable_notification)
+                __id, broadcast_msg.caption, disable_notification=disable_notification
+            )
             success += 1
             # preventing flood wait
             await sleep(0.3)
@@ -69,4 +72,5 @@ async def broadcast(_, message: Message):
             failed += 1
 
     return await proses_msg.edit(
-        f"**The message has been successfully broadcasted.**\n\nTotal success = {success}\nTotal Failure = {failed}")
+        f"**The message has been successfully broadcasted.**\n\nTotal success = {success}\nTotal Failure = {failed}"
+    )

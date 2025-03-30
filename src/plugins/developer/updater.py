@@ -31,5 +31,7 @@ async def restart(_, message: Message):
     """Restart the bot and update the bot with local changes."""
 
     LOGGER(__name__).info("Restarting the bot. shutting down this instance")
-    await message.reply_text("Starting a new instance and shutting down this one...", quote=True)
+    await message.reply_text(
+        "Starting a new instance and shutting down this one...", quote=True
+    )
     os.execl(sys.executable, sys.executable, "-m", "src")

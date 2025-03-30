@@ -18,11 +18,10 @@ from src.database.MongoDb import check_mongo_uri
 
 from keep_alive_ping import KeepAliveService
 
-# for render and koyeb comment it ou uf you dont need it 
+# for render and koyeb comment it ou uf you dont need it
 
 service = KeepAliveService(
-    log_level = log.ERROR, # no need for info 
-    ping_interval=60  # Ping every 1 minutes
+    log_level=log.ERROR, ping_interval=60  # no need for info  # Ping every 1 minutes
 )
 
 
@@ -52,10 +51,10 @@ except RuntimeError:
 LOGGER(__name__).info("setting up pinger for keep alive ....")
 
 try:
-  # service.start()
-  pass
+    # service.start()
+    pass
 except Exception as e:
-  raise e
+    raise e
 # https://patorjk.com/software/taag/#p=display&f=Graffiti&t=Type%20Something%20
 
 

@@ -7,8 +7,13 @@ import aiofiles
 from pyrogram import filters
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from src import bot
-from src.helpers.filters import is_rate_limited,is_download_callback_rate_limited
-from src.helpers.pasting_services import katbin_paste, telegraph_paste, telegraph_image_paste
+from src.helpers.filters import is_rate_limited, is_download_callback_rate_limited
+from src.helpers.pasting_services import (
+    katbin_paste,
+    telegraph_paste,
+    telegraph_image_paste,
+)
+
 
 @bot.on_message(filters.command("paste") & is_rate_limited)
 async def paste(_, message: Message):
@@ -19,7 +24,9 @@ async def paste(_, message: Message):
 
     if replied_message:
         # Handle image pasting (photo or document with image mime_type)
-        if replied_message.photo or (replied_message.document and "image" in replied_message.document.mime_type):
+        if replied_message.photo or (
+            replied_message.document and "image" in replied_message.document.mime_type
+        ):
             try:
                 file_path = await replied_message.download()
                 output = await telegraph_image_paste(file_path)
@@ -30,12 +37,24 @@ async def paste(_, message: Message):
             return
 
         # Handle text pasting (text or text file)
-        elif replied_message.text or (replied_message.document and any(format in replied_message.document.mime_type for format in {"text", "json"})):
+        elif replied_message.text or (
+            replied_message.document
+            and any(
+                format in replied_message.document.mime_type
+                for format in {"text", "json"}
+            )
+        ):
             buttons = [
-                [InlineKeyboardButton("◍ Katb.in", callback_data="paste_katbin"),
-                 InlineKeyboardButton("◍ Telegraph", callback_data="paste_telegraph")]
+                [
+                    InlineKeyboardButton("◍ Katb.in", callback_data="paste_katbin"),
+                    InlineKeyboardButton(
+                        "◍ Telegraph", callback_data="paste_telegraph"
+                    ),
+                ]
             ]
-            await paste_reply.edit("Choose paste service:", reply_markup=InlineKeyboardMarkup(buttons))
+            await paste_reply.edit(
+                "Choose paste service:", reply_markup=InlineKeyboardMarkup(buttons)
+            )
             return
 
         else:
@@ -45,16 +64,21 @@ async def paste(_, message: Message):
     # Handle direct text input with the command
     elif len(message.command) > 1:
         buttons = [
-            [InlineKeyboardButton("◍ Katb.in", callback_data="paste_katbin"),
-             InlineKeyboardButton("◍ Telegraph", callback_data="paste_telegraph")]
+            [
+                InlineKeyboardButton("◍ Katb.in", callback_data="paste_katbin"),
+                InlineKeyboardButton("◍ Telegraph", callback_data="paste_telegraph"),
+            ]
         ]
-        await paste_reply.edit("♔ Choose paste service:", reply_markup=InlineKeyboardMarkup(buttons))
+        await paste_reply.edit(
+            "♔ Choose paste service:", reply_markup=InlineKeyboardMarkup(buttons)
+        )
         return
 
     else:
         await paste_reply.edit(paste_usage)
 
-@bot.on_callback_query(filters.regex("paste_")& is_download_callback_rate_limited)
+
+@bot.on_callback_query(filters.regex("paste_") & is_download_callback_rate_limited)
 async def paste_callback(client, callback_query):
     """Handles callback queries from paste service selection buttons."""
     data = callback_query.data
@@ -75,7 +99,9 @@ async def paste_callback(client, callback_query):
         replied = original_message.reply_to_message
         if replied.text:
             content = replied.text
-        elif replied.document and any(format in replied.document.mime_type for format in {"text", "json"}):
+        elif replied.document and any(
+            format in replied.document.mime_type for format in {"text", "json"}
+        ):
             try:
                 file_path = await replied.download()
                 async with aiofiles.open(file_path, "r+") as file:
@@ -95,11 +121,15 @@ async def paste_callback(client, callback_query):
     # Paste the content and update the message
     try:
         output = await paste_func(content)
-        button = [[InlineKeyboardButton(text=f"♔ Pasted to {service_name} ", url=output)]]
+        button = [
+            [InlineKeyboardButton(text=f"♔ Pasted to {service_name} ", url=output)]
+        ]
         await callback_query.message.edit_text(
             output,
             reply_markup=InlineKeyboardMarkup(button),
-            disable_web_page_preview=True
+            disable_web_page_preview=True,
         )
     except Exception as e:
-        await callback_query.message.edit_text(f"Failed to paste to {service_name}: {e}")
+        await callback_query.message.edit_text(
+            f"Failed to paste to {service_name}: {e}"
+        )

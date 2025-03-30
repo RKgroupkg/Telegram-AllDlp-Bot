@@ -24,8 +24,9 @@ async def katbin_paste(text: str) -> str:
         paste_post = await client.post(
             katbin_url,
             data={"_csrf_token": csrf_token, "paste[content]": text},
-            follow_redirects=False)
-            
+            follow_redirects=False,
+        )
+
         output_url = f"{katbin_url}{paste_post.headers['location']}"
         await client.aclose()
         return output_url
@@ -43,8 +44,7 @@ async def telegraph_paste(content: str) -> str:
     await telegraph.create_account(short_name="src")
     html_content = "<pre>" + content.replace("\n", "<br>") + "</pre>"
     try:
-        response = await telegraph.create_page(
-            title="src", html_content=html_content)
+        response = await telegraph.create_page(title="src", html_content=html_content)
         response = response["url"]
     except Exception as error:
         response = await katbin_paste(content)

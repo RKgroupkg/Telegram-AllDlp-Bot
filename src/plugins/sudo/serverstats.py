@@ -30,8 +30,10 @@ async def stats(_, message: Message):
         progress = 110 + (progress * 10.8)
         draw.ellipse((105, coordinate - 25, 127, coordinate), fill="#DDFD35")
         progress = 121 if progress < 121 else progress
-        draw.rectangle([(120, coordinate -25), (progress, coordinate)], fill="#DDFD35")
-        draw.ellipse((progress - 7, coordinate - 25, progress + 15, coordinate), fill="#DDFD35")
+        draw.rectangle([(120, coordinate - 25), (progress, coordinate)], fill="#DDFD35")
+        draw.ellipse(
+            (progress - 7, coordinate - 25, progress + 15, coordinate), fill="#DDFD35"
+        )
 
     total, used, free = shutil.disk_usage(".")
     process = psutil.Process(os.getpid())
@@ -61,7 +63,8 @@ async def stats(_, message: Message):
     msg = await message.reply_photo(
         photo="https://te.legra.ph/file/30a82c22854971d0232c7.jpg",
         caption=caption,
-        quote=True)
+        quote=True,
+    )
     end = datetime.now()
 
     draw_progressbar(243, int(cpu_percentage))

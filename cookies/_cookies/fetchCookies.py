@@ -1,4 +1,3 @@
-
 #  Copyright (c) 2025 Rkgroup.
 #  Quick Dl is an open-source Downloader bot licensed under MIT.
 #  All rights reserved where applicable.
@@ -14,6 +13,7 @@ import aiofiles
 import aiohttp
 
 from src.logging import LOGGER
+
 logger = LOGGER(__name__)
 
 
@@ -39,13 +39,17 @@ async def fetch_content(session: aiohttp.ClientSession, url: str) -> str | None:
 async def save_bin_content(session: aiohttp.ClientSession, url: str) -> str | None:
     """Downloads content from BatBin and saves it as a .txt file."""
     parsed = urlparse(url)
-    filename = (parsed.path.strip("/").split('/')[-1] or str(uuid.uuid4()).split("-")[0]).split("?")[0].split("#")[0]
+    filename = (
+        (parsed.path.strip("/").split("/")[-1] or str(uuid.uuid4()).split("-")[0])
+        .split("?")[0]
+        .split("#")[0]
+    )
     filename += ".txt"
     filepath = os.path.join("cookies", filename)
 
     content = await fetch_content(session, url)
 
-    content = base64.b64decode(content + '==').decode('utf-8')
+    content = base64.b64decode(content + "==").decode("utf-8")
 
     if content:
         os.makedirs(os.path.dirname(filepath), exist_ok=True)

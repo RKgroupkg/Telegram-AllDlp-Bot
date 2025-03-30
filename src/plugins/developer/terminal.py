@@ -25,13 +25,15 @@ from src import bot
 
 task_list: list = []
 
+
 @bot.on_callback_query(filters.regex("pytaskcallback_"))
 async def py_taskcallback(_, callback: CallbackQuery):
     """Callback for shell command."""
 
     if callback.from_user.id != callback.message.reply_to_message.from_user.id:
         return await callback.answer(
-            "That command is not initiated by you.", show_alert=True)
+            "That command is not initiated by you.", show_alert=True
+        )
 
     task_index = callback.data.split("_")[-1]
     message = callback.message
@@ -74,7 +76,8 @@ async def py_runexec(client: Client, message: Message, replymsg: Message):
         code = message.text.split(maxsplit=1)[1]
     except IndexError:
         return await replymsg.edit(
-            "No codes found to execute.", reply_markup=refresh_button)
+            "No codes found to execute.", reply_markup=refresh_button
+        )
 
     try:
         task = asyncio.create_task(aexec(code, client, message))
@@ -116,13 +119,13 @@ async def py_runexec(client: Client, message: Message, replymsg: Message):
             await file.write(str(evaluation.strip()))
 
         await replymsg.edit(
-            "output too large. sending it as a file...", reply_markup=refresh_button)
+            "output too large. sending it as a file...", reply_markup=refresh_button
+        )
 
         await client.send_document(message.chat.id, "output.txt", caption="output.txt")
         os.remove("output.txt")
 
-    return await replymsg.edit(
-        final_output, reply_markup=refresh_button)
+    return await replymsg.edit(final_output, reply_markup=refresh_button)
 
 
 @bot.on_callback_query(filters.regex("refresh"))
@@ -134,11 +137,13 @@ async def py_callback(client: Client, callbackquery: CallbackQuery):
 
     if clicker_user_id != message_user_id:
         return await callbackquery.answer(
-            "That command is not initiated by you.", show_alert=True)
+            "That command is not initiated by you.", show_alert=True
+        )
 
     replymsg = callbackquery.message
     message = await client.get_messages(
-        callbackquery.message.chat.id, callbackquery.message.reply_to_message.id)
+        callbackquery.message.chat.id, callbackquery.message.reply_to_message.id
+    )
 
     if callbackquery.data == "refresh":
         await py_runexec(client, message, replymsg)
@@ -150,7 +155,8 @@ async def py_execute(client: Client, message: Message):
 
     if len(message.command) < 2:
         await message.reply_text(
-            "**Usage:** Executes python commands directly via bot.\n\n**Example: **<pre>/exec print('hello world')</pre>")
+            "**Usage:** Executes python commands directly via bot.\n\n**Example: **<pre>/exec print('hello world')</pre>"
+        )
     else:
         replymsg = await message.reply_text("Executing..", quote=True)
         await py_runexec(client, message, replymsg)

@@ -27,7 +27,8 @@ async def shell_callback(_, callback: CallbackQuery):
 
     if callback.from_user.id != callback.message.reply_to_message.from_user.id:
         return await callback.answer(
-            "That command is not initiated by you.", show_alert=True)
+            "That command is not initiated by you.", show_alert=True
+        )
 
     process_id = callback.data.split("_")[-1]
     message = callback.message
@@ -50,11 +51,19 @@ async def shell_executor(_, message: Message):
             user_input,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            preexec_fn=os.setsid)
+            preexec_fn=os.setsid,
+        )
 
-        button = [[InlineKeyboardButton("Kill Process", callback_data=f"shellcallback_{shell.pid}")]]
+        button = [
+            [
+                InlineKeyboardButton(
+                    "Kill Process", callback_data=f"shellcallback_{shell.pid}"
+                )
+            ]
+        ]
         shell_replymsg = await message.reply_text(
-            "Executing...", reply_markup=InlineKeyboardMarkup(button), quote=True)
+            "Executing...", reply_markup=InlineKeyboardMarkup(button), quote=True
+        )
 
         stdout, stderr = await shell.communicate()
         result = str(stdout.decode().strip()) + str(stderr.decode().strip())
@@ -67,6 +76,7 @@ async def shell_executor(_, message: Message):
         file = BytesIO(result.encode())
         file.name = "output.txt"
         await shell_replymsg.reply_document(
-            file, caption=f"shell command :- `{user_input}`", quote=True)
+            file, caption=f"shell command :- `{user_input}`", quote=True
+        )
     else:
         await shell_replymsg.edit(f"--**Output**--\n\n`{result}`")

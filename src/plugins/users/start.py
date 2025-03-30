@@ -16,7 +16,7 @@ from pyrogram.types import InputMediaPhoto
 
 from src import bot
 from src.database import database
-from src.helpers.filters import is_rate_limited,is_download_callback_rate_limited
+from src.helpers.filters import is_rate_limited, is_download_callback_rate_limited
 from src.config import OWNER_USERID, SUDO_USERID
 from src.helpers.start_constants import (
     START_CAPTION,
@@ -49,32 +49,32 @@ START_BUTTON = [
             url="https://t.me/rkgroup_update",
         )
     ],
-
 ]
 
 
 COMMAND_BUTTON = [
-    [
-        InlineKeyboardButton("⚜ DLP", callback_data="DLP_BUTTON")
-    ],
+    [InlineKeyboardButton("⚜ DLP", callback_data="DLP_BUTTON")],
     [
         InlineKeyboardButton("⚜ Users", callback_data="USER_BUTTON"),
         InlineKeyboardButton("⚜ Sudo", callback_data="SUDO_BUTTON"),
     ],
-    [InlineKeyboardButton("⚜ Developer", callback_data="DEV_BUTTON"),
-     InlineKeyboardButton("⚜ Inline", switch_inline_query="")
+    [
+        InlineKeyboardButton("⚜ Developer", callback_data="DEV_BUTTON"),
+        InlineKeyboardButton("⚜ Inline", switch_inline_query=""),
     ],
     [InlineKeyboardButton("⚜ How to use?", url="https://telegra.ph/Quickl-Dl-03-28")],
     [InlineKeyboardButton("◄ Go Back", callback_data="START_BUTTON")],
 ]
 
-ABOUT_ME_BUTTON =[
-    [    InlineKeyboardButton(
+ABOUT_ME_BUTTON = [
+    [
+        InlineKeyboardButton(
             "♔ Source",
             url="https://github.com/RKgroupkg/Telegram-AllDlp-Bot",
         )
     ],
-    [    InlineKeyboardButton(
+    [
+        InlineKeyboardButton(
             "♧ Privacy Policy",
             url="https://telegra.ph/Quick-Dl-03-25",
         ),
@@ -84,11 +84,9 @@ ABOUT_ME_BUTTON =[
             "♧ Code Of Conduct",
             url="https://telegra.ph/Quick-Dl-03-25-2",
         )
-   ],
-    [
-        InlineKeyboardButton("◄ Go Back", callback_data="START_BUTTON_ABOUTME")
     ],
-    ]
+    [InlineKeyboardButton("◄ Go Back", callback_data="START_BUTTON_ABOUTME")],
+]
 
 
 GOBACK_1_BUTTON = [[InlineKeyboardButton("◄ Go Back", callback_data="START_BUTTON")]]
@@ -98,16 +96,16 @@ GOBACK_2_BUTTON = [[InlineKeyboardButton("◄ Go Back", callback_data="COMMAND_B
 @bot.on_message(filters.command(["start", "help"]) & is_rate_limited)
 async def start(_, message: Message):
     await database.save_user(message.from_user)
-        
+
     return await message.reply_photo(
-        photo = QUICKDL_BANNER,
-        caption = START_CAPTION,
+        photo=QUICKDL_BANNER,
+        caption=START_CAPTION,
         reply_markup=InlineKeyboardMarkup(START_BUTTON),
-        quote=True
+        quote=True,
     )
 
 
-@bot.on_callback_query(filters.regex("_BUTTON")& is_download_callback_rate_limited)
+@bot.on_callback_query(filters.regex("_BUTTON") & is_download_callback_rate_limited)
 async def botCallbacks(_, CallbackQuery: CallbackQuery):
 
     clicker_user_id = CallbackQuery.from_user.id
@@ -138,8 +136,8 @@ async def botCallbacks(_, CallbackQuery: CallbackQuery):
 
     if CallbackQuery.data == "ABOUT_BUTTON":
         await CallbackQuery.edit_message_media(
-            media= InputMediaPhoto( media=RKGROUP_LOGO,caption=ABOUT_CAPTION),
-            reply_markup = InlineKeyboardMarkup(ABOUT_ME_BUTTON),
+            media=InputMediaPhoto(media=RKGROUP_LOGO, caption=ABOUT_CAPTION),
+            reply_markup=InlineKeyboardMarkup(ABOUT_ME_BUTTON),
         )
 
     elif CallbackQuery.data == "START_BUTTON":
@@ -148,11 +146,9 @@ async def botCallbacks(_, CallbackQuery: CallbackQuery):
         )
     elif CallbackQuery.data == "START_BUTTON_ABOUTME":
         await CallbackQuery.edit_message_media(
-            media= InputMediaPhoto(media=QUICKDL_BANNER,caption=START_CAPTION),
-            reply_markup = InlineKeyboardMarkup(START_BUTTON),
+            media=InputMediaPhoto(media=QUICKDL_BANNER, caption=START_CAPTION),
+            reply_markup=InlineKeyboardMarkup(START_BUTTON),
         )
-
-
 
     elif CallbackQuery.data == "COMMAND_BUTTON":
         await CallbackQuery.edit_message_text(
@@ -166,8 +162,8 @@ async def botCallbacks(_, CallbackQuery: CallbackQuery):
     elif CallbackQuery.data == "DLP_BUTTON":
         await CallbackQuery.edit_message_text(
             DLP_TEXT,
-            parse_mode = ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup(GOBACK_2_BUTTON)
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup(GOBACK_2_BUTTON),
         )
     await CallbackQuery.answer()
 
@@ -183,4 +179,3 @@ async def new_chat(_, message: Message):
     for new_user in message.new_chat_members:
         if new_user.id == bot.me.id:
             await database.save_chat(chatid)
-    

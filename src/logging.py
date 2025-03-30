@@ -19,7 +19,7 @@ logging.basicConfig(
     handlers=[
         RotatingFileHandler("logs.txt", mode="w+", maxBytes=5000000, backupCount=3),
         logging.StreamHandler(),
-    ]
+    ],
 )
 
 # Suppressing pyrogram INFO messages.
@@ -28,6 +28,7 @@ logging.getLogger("apscheduler").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("keep-alive-ping ").setLevel(logging.WARNING)
+
 
 def LOGGER(name: str) -> logging.Logger:
     return logging.getLogger(name)
