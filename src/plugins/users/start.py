@@ -16,7 +16,7 @@ from pyrogram.types import InputMediaPhoto
 
 from src import bot
 from src.database import database
-from src.helpers.filters import is_ratelimited
+from src.helpers.filters import is_rate_limited,is_download_callback_rate_limited
 from src.config import OWNER_USERID, SUDO_USERID
 from src.helpers.start_constants import (
     START_CAPTION,
@@ -95,7 +95,7 @@ GOBACK_1_BUTTON = [[InlineKeyboardButton("◄ Go Back", callback_data="START_BUT
 GOBACK_2_BUTTON = [[InlineKeyboardButton("◄ Go Back", callback_data="COMMAND_BUTTON")]]
 
 
-@bot.on_message(filters.command(["start", "help"]) & is_ratelimited)
+@bot.on_message(filters.command(["start", "help"]) & is_rate_limited)
 async def start(_, message: Message):
     await database.save_user(message.from_user)
         
@@ -107,7 +107,7 @@ async def start(_, message: Message):
     )
 
 
-@bot.on_callback_query(filters.regex("_BUTTON"))
+@bot.on_callback_query(filters.regex("_BUTTON")& is_download_callback_rate_limited)
 async def botCallbacks(_, CallbackQuery: CallbackQuery):
 
     clicker_user_id = CallbackQuery.from_user.id

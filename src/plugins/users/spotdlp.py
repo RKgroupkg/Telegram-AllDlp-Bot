@@ -14,7 +14,7 @@ from pyrogram import filters
 from pyrogram.types import Message
 
 from src import bot
-from src.helpers.filters import is_ratelimiter_dl
+from src.helpers.filters import is_download_rate_limited
 from src.helpers.dlp.yt_dl.ytdl_core import search_youtube, fetch_youtube_info
 from src.helpers.dlp.yt_dl.utils import create_format_selection_markup
 from src.config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
@@ -131,7 +131,7 @@ async def find_youtube_match(track_info: Dict[str, Any]) -> Optional[SearchInfo]
     return video_info
 
 
-@bot.on_message(filters.regex(SPOTIFY_TRACK_REGEX)|filters.command(["spt","spotify","sptdlp","dlmusic"]) & is_ratelimiter_dl)
+@bot.on_message(filters.regex(SPOTIFY_TRACK_REGEX)|filters.command(["spt","spotify","sptdlp","dlmusic"]) & is_download_rate_limited)
 async def spotify_track_handler(_, message: Message):
     """Handle Spotify track links and convert to YouTube download options"""
     
@@ -241,7 +241,7 @@ async def spotify_track_handler(_, message: Message):
     except Exception as e:
         await status_msg.edit_text(f"✖ Error: {str(e)}")
 
-@bot.on_message(filters.regex(SPOTIFY_ALBUM_REGEX) & is_ratelimiter_dl)
+@bot.on_message(filters.regex(SPOTIFY_ALBUM_REGEX) & is_download_rate_limited)
 async def spotify_album_handler(_, message: Message):
     """Handle Spotify album links with minimal response"""
     
@@ -290,7 +290,7 @@ async def spotify_album_handler(_, message: Message):
         await message.reply_text(f"✖ Error: {str(e)}", quote=True)
 
 
-@bot.on_message(filters.regex(SPOTIFY_PLAYLIST_REGEX) & is_ratelimiter_dl)
+@bot.on_message(filters.regex(SPOTIFY_PLAYLIST_REGEX) & is_download_rate_limited)
 async def spotify_playlist_handler(_, message: Message):
     """Handle Spotify playlist links with minimal response"""
     

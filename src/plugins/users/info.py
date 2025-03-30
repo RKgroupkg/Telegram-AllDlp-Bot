@@ -4,13 +4,13 @@
 #
 #
 
-from src.helpers.filters import is_ratelimited
+from src.helpers.filters import is_rate_limited
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.enums import ChatType
 
 
-@Client.on_message(filters.command(["id"]) & is_ratelimited)
+@Client.on_message(filters.command(["id"]) & is_rate_limited)
 async def get_id_info(client: Client, message: Message):
     """
     Plugin that provides detailed information about a message or user

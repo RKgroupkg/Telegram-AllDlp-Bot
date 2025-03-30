@@ -28,7 +28,7 @@ class RateLimiter:
                 limit_sec: Number of requests allowed within ``interval``
                 limit_min: Number of requests allowed within ``interval``
                 interval_sec: Time interval, in seconds
-                interval_min: Time interval, in minute
+                interval_min: Time interval, in sec but for larger time 
                 
         """
 

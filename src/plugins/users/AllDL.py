@@ -13,7 +13,7 @@ from pyrogram import Client, filters, enums
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from pyrogram.enums import ParseMode
 from src.logging import LOGGER
-from src.helpers.filters import Main_dlURl, is_ratelimiter_dl, ytdlp_url
+from src.helpers.filters import allowed_url, is_download_rate_limited, ytdlp_url,is_download_callback_rate_limited
 from src.helpers.dlp._rex import URL_REGEX
 from src.helpers.dlp.yt_dl.ytdl_core import (
     download_video_from_link, clean_temporary_file, DownloadInfo
@@ -294,7 +294,7 @@ def download_handler(func):
     return wrapper
 
 # Callback handlers
-@Client.on_callback_query(filters.regex(r'^cancel_dl$'))
+@Client.on_callback_query(filters.regex(r'^cancel_dl$')& is_download_callback_rate_limited)
 async def handle_cancel_download(client: Client, callback_query: CallbackQuery):
     """Handle download cancellation requests"""
     chat_id = callback_query.message.chat.id
@@ -334,7 +334,7 @@ async def handle_cancel_download(client: Client, callback_query: CallbackQuery):
         else:
             await callback_query.answer("No active download to cancel", show_alert=True)
 
-@Client.on_callback_query(filters.regex(r'^retry_download$'))
+@Client.on_callback_query(filters.regex(r'^retry_download$')& is_download_callback_rate_limited)
 async def handle_retry_download(client: Client, callback_query: CallbackQuery):
     """Handle download retry requests"""
     original_message = callback_query.message.reply_to_message
@@ -347,7 +347,7 @@ async def handle_retry_download(client: Client, callback_query: CallbackQuery):
     else:
         await callback_query.answer("Cannot retry, original message not found", show_alert=True)
 
-@Client.on_callback_query(filters.regex(r'^queue_info$'))
+@Client.on_callback_query(filters.regex(r'^queue_info$')& is_download_callback_rate_limited)
 async def handle_queue_info(client: Client, callback_query: CallbackQuery):
     """Provide information about the queue system"""
     await callback_query.answer("Queue information", show_alert=True)
@@ -358,18 +358,18 @@ async def handle_queue_info(client: Client, callback_query: CallbackQuery):
     await callback_query.message.edit_text(queue_info)
 
 # Main download handler
-@Client.on_message(ytdlp_url & Main_dlURl & filters.incoming & filters.text & is_ratelimiter_dl)
+@Client.on_message(ytdlp_url & allowed_url & filters.incoming & filters.text & is_download_rate_limited)
 
 
 
 # Main download handler for direct messages
-@Client.on_message(ytdlp_url & Main_dlURl & filters.text & is_ratelimiter_dl)
+@Client.on_message(ytdlp_url & allowed_url & filters.text & is_download_rate_limited)
 async def text_msg_handler(client: Client, message: Message):
     """Handle video/media download requests from URLs"""
     await video_handler(client, message)
 
 # Handler for /dl command
-@Client.on_message(filters.command("dl") & ytdlp_url & filters.incoming & filters.text & is_ratelimiter_dl)
+@Client.on_message(filters.command("dl") & ytdlp_url & filters.incoming & filters.text & is_download_rate_limited)
 async def dl_command_handler(client: Client, message: Message):
     """Handle download requests through the /dl command"""
     await video_handler(client, message)

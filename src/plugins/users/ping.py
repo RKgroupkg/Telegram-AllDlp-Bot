@@ -13,11 +13,11 @@ from pyrogram.types import Message
 
 from src import bot
 from src import BotStartTime
-from src.helpers.filters import is_ratelimited
+from src.helpers.filters import is_rate_limited
 from src.helpers.functions import get_readable_time
 
 
-@bot.on_message(filters.command(["ping", "alive"]) & is_ratelimited)
+@bot.on_message(filters.command(["ping", "alive"]) & is_rate_limited)
 async def ping(_, message: Message):
     """Give ping speed of Telegram API along with Bot Uptime."""
 

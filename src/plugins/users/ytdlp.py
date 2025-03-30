@@ -12,7 +12,7 @@ import time
 from src.helpers.dlp._rex import YT_LINK_REGEX
 from src.helpers.dlp.yt_dl.catch import clean_expired_cache
 from src.helpers.dlp.yt_dl.callback import handle_youtube_link, handle_youtube_callback
-from src.helpers.filters import is_ratelimiter_dl , is_ratelimited
+from src.helpers.filters import is_download_rate_limited , is_rate_limited,is_download_callback_rate_limited
 from src.helpers.filters import sudo_cmd
 
 from src.logging import LOGGER
@@ -52,7 +52,7 @@ async def clean_cache_command(client: Client, message: Message):
     )
 
 # YouTube download command
-@Client.on_message(filters.command(["youtube", "yt", "ytdl"]) & ~filters.bot & is_ratelimiter_dl)
+@Client.on_message(filters.command(["youtube", "yt", "ytdl"]) & ~filters.bot & is_download_rate_limited)
 async def youtube_command(client: Client, message: Message):
     """Handle YouTube download command"""
     
@@ -82,19 +82,19 @@ async def youtube_command(client: Client, message: Message):
         )
 
 # YouTube link detection
-@Client.on_message(filters.regex(YT_LINK_REGEX) & filters.text & ~filters.bot & is_ratelimiter_dl)
+@Client.on_message(filters.regex(YT_LINK_REGEX) & filters.text & ~filters.bot & is_download_rate_limited)
 async def youtube_link_detector(client: Client, message: Message):
     """Detect and handle YouTube links in messages"""
     await handle_youtube_link(client, message)
 
 # Callback query handler for YouTube downloads
-@Client.on_callback_query(filters.regex(r'^yt'))
+@Client.on_callback_query(filters.regex(r'^yt') & is_download_callback_rate_limited)
 async def youtube_callback_handler(client: Client, callback_query: CallbackQuery):
     """Handle YouTube download callbacks"""
     await handle_youtube_callback(client, callback_query)
 
 # Command to show statistics about the YouTube downloader
-@Client.on_message(filters.command(["ytstats"]),is_ratelimited)
+@Client.on_message(filters.command(["ytstats"]),is_rate_limited)
 async def yt_stats_command(client: Client, message: Message):
     """Show statistics about the YouTube downloader"""
     from src.helpers.dlp.yt_dl.catch import callback_cache, video_info_cache

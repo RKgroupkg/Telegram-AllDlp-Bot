@@ -1,135 +1,250 @@
-#  Copyright (c) 2025 Rkgroup.
-#  Quick Dl is an open-source Downloader bot licensed under MIT.
-#  All rights reserved where applicable.
-#
-#
+"""
+Rate limiting and permission filters for Telegram bot operations.
 
+This module provides custom Pyrogram filters for:
+- User authorization (owner/sudo permissions)
+- Rate limiting for different operations
+- URL validation and processing
+
+The filters help manage bot resources and prevent abuse while ensuring
+smooth operation within Telegram's rate limitations.
 """
-Creating custom filters.
-https://docs.pyrogram.org/topics/create-filters
-"""
+
 import re
-from typing import Union
+import time
+import functools
+from typing import Union, List, Dict, Any, Callable, Optional
+from urllib.parse import urlparse
+
 from pyrogram import filters
 from pyrogram.enums import ChatType
 from pyrogram.types import Message, CallbackQuery
+import yt_dlp
+
 from src.helpers.ratelimiter import RateLimiter
 from src.config import SUDO_USERID, OWNER_USERID
-import time
-
-from urllib.parse import urlparse
-from typing import Callable, Optional, Union, List, Dict, Any
-import functools
-
 from src.helpers.dlp._rex import LINK_REGEX_PATTERNS
-import yt_dlp
 from src.logging import LOGGER
+
 logger = LOGGER(__name__)
 
-# command authorizations filters.
-def dev_users(_, __, message: Message) -> bool:
-    return message.from_user.id in OWNER_USERID if message.from_user else False
+# ============================================================================
+# Authorization Filters
+# ============================================================================
+
+def is_developer(_, __, message: Message) -> bool:
+    """Filter messages from developer/owner users only."""
+    return message.from_user and message.from_user.id in OWNER_USERID
 
 
-def sudo_users(_, __, message: Message) -> bool:
-    return message.from_user.id in SUDO_USERID if message.from_user else False
+def is_sudo_user(_, __, message: Message) -> bool:
+    """Filter messages from sudo users only."""
+    return message.from_user and message.from_user.id in SUDO_USERID
 
 
-# ratelimit filter
+# ============================================================================
+# Rate Limiting Configuration
+# ============================================================================
 
-chatid_ratelimiter = RateLimiter(limit_sec=1,limit_min=20,interval_sec=1,interval_min=60)
-global_ratelimiter = RateLimiter(limit_sec=30,limit_min=1800,interval_sec=1,interval_min=60)
-dl_ratelimiter = RateLimiter(limit_sec=1,limit_min=5,interval_sec=1,interval_min=60)
+# Chat-specific rate limiter (20 msg/min per chat as per Telegram limits)
+CHAT_RATE_LIMITER = RateLimiter(
+    limit_sec=1,
+    limit_min=20,
+    interval_sec=1,
+    interval_min=60
+)
+
+# Global rate limiter (30 msg/sec globally as per Telegram limits)
+GLOBAL_RATE_LIMITER = RateLimiter(
+    limit_sec=30,
+    limit_min=1800,
+    interval_sec=1,
+    interval_min=60
+)
+
+# Download operation rate limiter
+DOWNLOAD_RATE_LIMITER = RateLimiter(
+    limit_sec=1,
+    limit_min=5,
+    interval_sec=1,
+    interval_min=60
+)
+
+# Download callback operation rate limiter
+DOWNLOAD_CALLBACK_RATE_LIMITER = RateLimiter(
+    limit_sec=1,
+    limit_min=15,
+    interval_sec=1,
+    interval_min=60
+)
 
 
-async def ratelimiter(_, __, update: Union[Message, CallbackQuery]) -> bool:
+# ============================================================================
+# General Rate Limiting Filter
+# ============================================================================
+
+async def check_rate_limit(_, __, update: Union[Message, CallbackQuery]) -> bool:
     """
-    This filter will monitor the new messages or callback queries updates and ignore them if the
-    bot is about to hit the rate limit.
-
-    Telegram Official Rate Limits: 20msg/minute in same group, 30msg/second globally for all groups/users.
-    Additionally There is no mention of rate limit in  bot's private message so we will ignore in this filter.
-
-    You can customize the rate limit according to your needs and add user specific rate limit too.
-
-    https://core.telegram.org/bots/faq#my-bot-is-hitting-limits-how-do-i-avoid-this
-    https://telegra.ph/So-your-bot-is-rate-limited-01-26
-
-    params:
-        update (`Message | CallbackQuery`): The update to check for rate limit.
-
-    returns:
-        bool: True if the bot is not about to hit the rate limit, False otherwise.
+    Filter to prevent rate limit violations for general bot operations.
+    
+    Implements Telegram's official rate limits:
+    - 20 messages per minute in the same group
+    - 30 messages per second globally across all chats
+    
+    Private chats are not rate-limited by this filter.
+    
+    Args:
+        update: The Message or CallbackQuery to check
+        
+    Returns:
+        bool: True if not rate-limited, False otherwise
     """
-
-    is_global_limited = await global_ratelimiter.acquire("globalupdate")
-
+    # Check global rate limit first
+    is_global_limited = await GLOBAL_RATE_LIMITER.acquire("global_update")
     if is_global_limited:
-        logger.info(f"Global Ratelimit hit while processing: {chatid}")
+        chat_id = update.chat.id if isinstance(update, Message) else update.message.chat.id
+        logger.info(f"Global rate limit hit while processing chat: {chat_id}")
         return False
 
-    chatid = update.chat.id if isinstance(update, Message) else update.message.chat.id
+    # Extract chat info
+    chat_id = update.chat.id if isinstance(update, Message) else update.message.chat.id
     chat_type = update.chat.type if isinstance(update, Message) else update.message.chat.type
 
+    # Skip rate limiting for private chats
     if chat_type != ChatType.PRIVATE:
-        is_chatid_limited = await chatid_ratelimiter.acquire(chatid)
-
-        if is_chatid_limited:
+        is_chat_limited = await CHAT_RATE_LIMITER.acquire(chat_id)
+        if is_chat_limited:
             if isinstance(update, CallbackQuery):
-                await update.answer("Bot is getting too many requests, please try again later.", show_alert=True)
-            logger.info(f"Chat Ratelimit hit for: {chatid}")
+                await update.answer(
+                    "Bot is receiving too many requests, please try again later.",
+                    show_alert=True
+                )
+            logger.info(f"Chat rate limit hit for: {chat_id}")
             return False
 
     return True
 
 
-async def ratelimiter_dl(_, __, update: Union[Message, CallbackQuery]) -> bool:
+# ============================================================================
+# Download Operation Rate Limiting Filter
+# ============================================================================
+
+async def check_download_rate_limit(_, __, update: Union[Message, CallbackQuery]) -> bool:
     """
-    This filter will monitor the new messages or callback queries updates and ignore them if the
-    bot is about to hit the rate limit.
-    https://telegra.ph/So-your-bot-is-rate-limited-01-26
-
-    params:
-        update (`Message | CallbackQuery`): The update to check for rate limit.
-
-    returns:
-        bool: True if the bot is not about to hit the rate limit, False otherwise.
+    Filter to prevent rate limit violations specifically for download operations.
+    
+    Implements stricter limits for resource-intensive download operations:
+    - Still respects global limits
+    - Adds download-specific limits per chat
+    
+    Args:
+        update: The Message or CallbackQuery to check
+        
+    Returns:
+        bool: True if not rate-limited, False otherwise
     """
-
-    is_global_limited = await global_ratelimiter.acquire("globalupdate")
-
+    # Check global rate limit first
+    is_global_limited = await GLOBAL_RATE_LIMITER.acquire("global_update")
     if is_global_limited:
-        logger.info(f"Global Ratelimit hit while processing: {chatid}")
+        chat_id = update.chat.id if isinstance(update, Message) else update.message.chat.id
+        logger.info(f"Global rate limit hit while processing download from chat: {chat_id}")
         return False
 
-    chatid = update.chat.id if isinstance(update, Message) else update.message.chat.id
+    # Extract chat info
+    chat_id = update.chat.id if isinstance(update, Message) else update.message.chat.id
     chat_type = update.chat.type if isinstance(update, Message) else update.message.chat.type
 
-    if chat_type != ChatType.PRIVATE:
-        is_chatid_limited_dl = await dl_ratelimiter.acquire(chatid)
-        is_chatid_limited = await chatid_ratelimiter.acquire(chatid)
 
-        if is_chatid_limited_dl:
-            if isinstance(update, CallbackQuery):
-                await update.answer("You have reached the limit. Please try again in few minutes.", show_alert=True)
-            elif isinstance(update, Message):
-                await update.reply_text("You have reached the limit. Please try again in few minutes.", quote=True)
-            logger.info(f"Chat dl Ratelimit hit for: {chatid}")
-            return False
-        elif is_chatid_limited:
-            if isinstance(update, CallbackQuery):
-                logger.info(f"Chat Ratelimit hit for: {chatid}")
-                await update.answer("Bot is getting too many requests, please try again later.", show_alert=True)
-            return False
+    # Check both regular chat limit and download-specific limit
+    is_download_limited = await DOWNLOAD_RATE_LIMITER.acquire(chat_id)
+    is_chat_limited = await CHAT_RATE_LIMITER.acquire(chat_id)
+    if is_download_limited:
+        if isinstance(update, CallbackQuery):
+            await update.answer(
+                "Download limit reached. Please try again in a few minutes.",
+                show_alert=True
+            )
+        elif isinstance(update, Message):
+            await update.reply_text(
+                "Download limit reached. Please try again in a few minutes.",
+                quote=True
+            )
+        logger.info(f"Download rate limit hit for chat: {chat_id}")
+        return False
+    
+    elif is_chat_limited:
+        if isinstance(update, CallbackQuery):
+            await update.answer(
+                "Bot is receiving too many requests, please try again later.",
+                show_alert=True
+            )
+            logger.info(f"Chat rate limit hit for download from: {chat_id}")
+        return False
+    
+    return True
 
+
+# ============================================================================
+# Download Callback Rate Limiting Filter
+# ============================================================================
+
+async def check_download_callback_rate_limit(_, __, update: CallbackQuery) -> bool:
+    """
+    Filter to prevent rate limit violations for download-related callbacks.
+    
+    Args:
+        update: The CallbackQuery to check
+        
+    Returns:
+        bool: True if not rate-limited, False otherwise
+    """
+    # Check global rate limit first
+    is_global_limited = await GLOBAL_RATE_LIMITER.acquire("global_update")
+    if is_global_limited:
+        logger.info(f"Global rate limit hit while processing download callback from chat: {update.message.chat.id}")
+        return False
+
+    # Extract chat info
+    chat_id = update.message.chat.id
+    chat_type = update.message.chat.type
+
+    # Skip rate limiting for private chats
+    # Check both callback-specific and general chat limits
+    is_callback_limited = await DOWNLOAD_CALLBACK_RATE_LIMITER.acquire(chat_id)
+    is_chat_limited = await CHAT_RATE_LIMITER.acquire(chat_id)
+
+    if is_callback_limited:
+        await update.answer(
+           "Action limit reached. Please try again in a few minutes.",
+            show_alert=True
+        )
+        logger.info(f"Download callback rate limit hit for chat: {chat_id}")
+        return False
+        
+    elif is_chat_limited:
+            await update.answer(
+                "Bot is receiving too many requests, please try again later.",
+                show_alert=True
+            )
+            logger.info(f"Chat rate limit hit for download callback from: {chat_id}")
+            return False
 
     return True
 
 
-def Main_supportedDlUrl(_, __, message):
+# ============================================================================
+# URL Filtering Functions
+# ============================================================================
+
+def is_blocked_url(_, __, message: Message) -> bool:
     """
-    This filter returns True if the message text does NOT match any of the specified link patterns.
-    If any pattern matches, it returns False.
+    Filter that returns True if the message text does NOT match any blocked URL patterns.
+    
+    Args:
+        message: The message to check
+        
+    Returns:
+        bool: True if URL is allowed, False if it matches a blocked pattern
     """
     text = message.text or ""
     for pattern in LINK_REGEX_PATTERNS:
@@ -137,10 +252,22 @@ def Main_supportedDlUrl(_, __, message):
             return False
     return True
 
-class YtdlpUrlFilter:
-    """A filter for Pyrogram to check if a message contains a valid URL supported by yt-dlp."""
+
+# ============================================================================
+# YT-DLP URL Filter Class
+# ============================================================================
+
+class YTDLPUrlFilter:
+    """
+    Advanced filter for checking if a message contains a URL supported by yt-dlp.
     
-    # Common URL regex pattern
+    Features:
+    - URL extraction and validation
+    - Domain pattern caching for performance
+    - Intelligent URL format correction
+    """
+    
+    # Common URL regex pattern for extraction
     URL_PATTERN = re.compile(
         r'(https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|'
         r'www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|'
@@ -148,22 +275,28 @@ class YtdlpUrlFilter:
         r'www\.[a-zA-Z0-9]+\.[^\s]{2,})'
     )
     
-    # Cache for domain validation results to avoid repeated checks
-    _supported_domains_cache: Dict[str, bool] = {}
+    # Cache for domain validation results to reduce repeated checks
+    _domain_cache: Dict[str, bool] = {}
     
-    # Cache expiration time (in seconds)
-    _cache_expiry = 86400  # 24 hours
+    # Cache expiration time in seconds (24 hours)
+    _CACHE_EXPIRY = 86400
     
-    # Store common domain patterns from extractors (populated in initialize_domain_patterns)
-    _common_domain_patterns: List[re.Pattern] = []
+    # Common domain patterns from extractors (populated on initialization)
+    _domain_patterns: List[re.Pattern] = []
     
-    # Store initialization time
+    # Initialization flag
     _initialized = False
     
     @classmethod
     def is_supported_url(cls, url: str) -> bool:
         """
-        Check if the URL is supported by yt-dlp.
+        Check if a URL is supported by yt-dlp.
+        
+        Performs multiple validation stages:
+        1. URL parsing and normalization
+        2. Domain cache lookup
+        3. Pattern-based quick check
+        4. Full yt-dlp extraction test (as last resort)
         
         Args:
             url: The URL to check
@@ -172,31 +305,30 @@ class YtdlpUrlFilter:
             bool: True if the URL is supported, False otherwise
         """
         try:
-            # Try to get domain from URL
+            # Parse and normalize URL
             parsed_url = urlparse(url)
             domain = parsed_url.netloc
             
             # Handle URLs without scheme
-            if not domain and url.startswith("www."):
-                domain = url.split("/")[0]
-                url = f"http://{url}"
-            elif not domain:
-                # Try to fix the URL if it doesn't have a scheme
-                if "." in url and "/" in url:
+            if not domain:
+                if url.startswith("www."):
+                    domain = url.split("/")[0]
+                    url = f"http://{url}"
+                elif "." in url and "/" in url:
                     domain = url.split("/")[0]
                     url = f"http://{url}"
                 else:
                     return False
             
-            # Check cache first
-            if domain in cls._supported_domains_cache:
-                return cls._supported_domains_cache[domain]
+            # Check cache first for performance
+            if domain in cls._domain_cache:
+                return cls._domain_cache[domain]
             
-            # Quick check using common domain patterns (if initialized)
-            if cls._common_domain_patterns:
-                for pattern in cls._common_domain_patterns:
+            # Quick check using pre-compiled domain patterns
+            if cls._domain_patterns:
+                for pattern in cls._domain_patterns:
                     if pattern.search(domain):
-                        cls._supported_domains_cache[domain] = True
+                        cls._domain_cache[domain] = True
                         return True
             
             # Full extraction test as fallback
@@ -208,32 +340,31 @@ class YtdlpUrlFilter:
             }
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # Use extract_info with process=False to just check if the URL is recognized
-                # This is much faster than trying to fully process the URL
                 try:
+                    # Quick check with process=False for better performance
                     ydl.extract_info(url, download=False, process=False)
-                    cls._supported_domains_cache[domain] = True
+                    cls._domain_cache[domain] = True
                     return True
                 except yt_dlp.utils.UnsupportedError:
-                    cls._supported_domains_cache[domain] = False
+                    cls._domain_cache[domain] = False
                     return False
                 except yt_dlp.utils.ExtractorError:
-                    # If we get an extractor error, that means an extractor was found
-                    # but there was an issue with the specific URL. Consider this supported.
-                    cls._supported_domains_cache[domain] = True
+                    # If we get an extractor error, the URL format is valid but content may not be
+                    # This is considered supported
+                    cls._domain_cache[domain] = True
                     return True
                 except yt_dlp.utils.DownloadError:
-                    cls._supported_domains_cache[domain] = False
+                    cls._domain_cache[domain] = False
                     return False
                 
         except Exception as e:
-            logger.error(f"Error checking URL {url}: {str(e)}")
+            logger.error(f"Error validating URL {url}: {str(e)}")
             return False
     
     @classmethod
     def extract_urls(cls, text: str) -> List[str]:
         """
-        Extract all URLs from a text.
+        Extract all URLs from a text string.
         
         Args:
             text: The text to extract URLs from
@@ -249,53 +380,59 @@ class YtdlpUrlFilter:
     @classmethod
     def initialize_domain_patterns(cls) -> None:
         """
-        Initialize common domain patterns from yt-dlp extractors for faster URL checking.
-        This should be called at bot startup.
+        Initialize common domain patterns from yt-dlp extractors.
+        
+        This optimization should be called at bot startup to cache patterns
+        for faster URL checking during operation.
         """
         try:
             start_time = time.time()
             
-            # Get all extractors
+            # Get all available extractors
             extractors = yt_dlp.extractor.gen_extractors()
             
-            # Gather domain patterns from IE_NAME and _VALID_URL patterns
+            # Collect domain patterns from extractors
             domain_patterns = []
             
             for extractor in extractors:
-                # Try to get patterns from _VALID_URL if available
+                # Try to extract patterns from _VALID_URL regex if available
                 valid_url = getattr(extractor, '_VALID_URL', None)
                 if valid_url:
-                    # Extract domain pattern from _VALID_URL 
                     try:
-                        # Look for common domain parts in the pattern
-                        domain_parts = re.findall(r'(?:https?://)?(?:(?:www|m)\.)?([a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)', valid_url)
+                        # Extract domain pattern from regex
+                        domain_parts = re.findall(
+                            r'(?:https?://)?(?:(?:www|m)\.)?([a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)',
+                            valid_url
+                        )
                         for part in domain_parts:
                             if part and '.' in part:
                                 domain_patterns.append(part.replace('\\', ''))
-                    except:
+                    except Exception:
                         pass
                 
-                # Get IE_NAME as a fallback
+                # Use IE_NAME as fallback/additional pattern
                 ie_name = getattr(extractor, 'IE_NAME', '').lower()
                 if ie_name and '.' in ie_name:
                     domain_patterns.append(ie_name)
             
             # Compile patterns for faster matching
-            cls._common_domain_patterns = [
+            cls._domain_patterns = [
                 re.compile(re.escape(pattern), re.IGNORECASE) 
                 for pattern in set(domain_patterns) 
-                if pattern and len(pattern) > 3  # Filter out very short patterns
+                if pattern and len(pattern) > 3  # Filter short patterns
             ]
             
             cls._initialized = True
-            logger.info(f"Initialized {len(cls._common_domain_patterns)} domain patterns in {time.time() - start_time:.2f}s")
+            logger.info(f"Initialized {len(cls._domain_patterns)} yt-dlp domain patterns in {time.time() - start_time:.2f}s")
         except Exception as e:
-            logger.error(f"Error initializing domain patterns: {str(e)}")
+            logger.error(f"Error initializing yt-dlp domain patterns: {str(e)}")
     
     @classmethod
     def has_supported_url(cls) -> Callable:
         """
-        Create a Pyrogram filter that checks if a message contains a URL supported by yt-dlp.
+        Create a Pyrogram filter that checks if a message contains a yt-dlp supported URL.
+        
+        When this filter passes, it adds a 'ytdlp_url' attribute to the message for convenience.
         
         Returns:
             Callable: A Pyrogram filter function
@@ -319,7 +456,7 @@ class YtdlpUrlFilter:
             # Check if any URL is supported
             for url in urls:
                 if cls.is_supported_url(url):
-                    # Store the found URL in message.ytdlp_url for easy access
+                    # Store the found URL in message.ytdlp_url for easy access in handlers
                     message.ytdlp_url = url
                     return True
                     
@@ -329,17 +466,38 @@ class YtdlpUrlFilter:
 
     @classmethod
     def clear_cache(cls):
-        """Clear the domain support cache"""
-        cls._supported_domains_cache.clear()
-
-# Create the filter instance for easy importing
-ytdlp_url = YtdlpUrlFilter.has_supported_url()
+        """Clear the domain support cache."""
+        cls._domain_cache.clear()
 
 
-# Create the filter using filters.create
-Main_dlURl = filters.create(Main_supportedDlUrl)
-# creating filters.
-dev_cmd = filters.create(dev_users)
-sudo_cmd = filters.create(sudo_users)
-is_ratelimited = filters.create(ratelimiter)
-is_ratelimiter_dl = filters.create(ratelimiter_dl)
+# ============================================================================
+# Create filter instances for easy importing
+# ============================================================================
+
+# Permission filters
+dev_cmd = filters.create(is_developer)
+sudo_cmd = filters.create(is_sudo_user)
+
+# Rate limiting filters
+is_rate_limited = filters.create(check_rate_limit)
+is_download_rate_limited = filters.create(check_download_rate_limit)
+is_download_callback_rate_limited = filters.create(check_download_callback_rate_limit)
+
+# URL filters
+allowed_url = filters.create(is_blocked_url) 
+ytdlp_url = YTDLPUrlFilter.has_supported_url()
+
+
+# old
+
+# # Create the filter instance for easy importing
+# ytdlp_url = YtdlpUrlFilter.has_supported_url()
+
+
+# # Create the filter using filters.create
+# Main_dlURl = filters.create(Main_supportedDlUrl)
+# # creating filters.
+# dev_cmd = filters.create(dev_users)
+# sudo_cmd = filters.create(sudo_users)
+# is_ratelimited = filters.create(ratelimiter)
+# is_download_rate_limited = filters.create(ratelimiter_dl)

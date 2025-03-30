@@ -23,7 +23,7 @@ from pyrogram.types import (
     InlineQueryResultVideo,
     InputTextMessageContent
 )
-from src.helpers.filters import is_ratelimited,is_ratelimiter_dl
+from src.helpers.filters import is_rate_limited,is_download_rate_limited
 from src.helpers.dlp.Insta_dl.insta_dl import get_instagram_post_data
 from src.helpers.decorators import catch_errors
 
@@ -108,7 +108,7 @@ def instagram_link_filter(_, __, message: Message) -> bool:
 instagram_filter = filters.create(instagram_link_filter)
 
 
-@Client.on_message(instagram_filter & ~filters.bot & ~filters.via_bot & filters.incoming & is_ratelimiter_dl)
+@Client.on_message(instagram_filter & ~filters.bot & ~filters.via_bot & filters.incoming & is_download_rate_limited)
 @catch_errors
 async def instagram_downloader_handler(client: Client, message: Message) -> None:
     """
@@ -287,7 +287,7 @@ async def instagram_downloader_handler(client: Client, message: Message) -> None
 
 
 # Alternative command to manually trigger download for a specific Instagram link
-@Client.on_message(filters.command(["instagram", "insta", "igdl"]) & is_ratelimiter_dl)
+@Client.on_message(filters.command(["instagram", "insta", "igdl"]) & is_download_rate_limited)
 @catch_errors
 async def instagram_command_handler(client: Client, message: Message) -> None:
     """
@@ -399,7 +399,7 @@ async def instagram_command_handler(client: Client, message: Message) -> None:
 
 
 # Help command to show information about Instagram downloader feature
-@Client.on_message(filters.command(["ighelp"]) & is_ratelimited)
+@Client.on_message(filters.command(["ighelp"]) & is_rate_limited)
 async def instagram_help_handler(client: Client, message: Message) -> None:
     """Provide help information about the Instagram downloader feature."""
     help_text = (

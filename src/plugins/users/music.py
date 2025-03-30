@@ -15,7 +15,7 @@ from pyrogram.types import (
 )
 
 from src import bot
-from src.helpers.filters import is_ratelimited
+from src.helpers.filters import is_rate_limited,is_download_callback_rate_limited
 from src.helpers.dlp.yt_dl.ytdl_core import search_youtube, fetch_youtube_info
 from pyrogram.enums import ParseMode
 
@@ -40,7 +40,7 @@ logger = LOGGER(__name__)
 MUSIC_SEARCH_CACHE = {}
 
 
-@bot.on_message(filters.command(["music","search","play"]) & is_ratelimited)
+@bot.on_message(filters.command(["music","search","play"]) & is_rate_limited)
 async def music_search(_, message: Message):
     """
     Search YouTube for music tracks with enhanced presentation
@@ -196,7 +196,7 @@ async def send_music_results(
             parse_mode=ParseMode.HTML
         )
 
-@bot.on_callback_query(filters.regex("^music_select:"))
+@bot.on_callback_query(filters.regex("^music_select:")& is_download_callback_rate_limited)
 async def music_select_handler(_, query: CallbackQuery):
     """
     Handle music track selection
@@ -295,7 +295,7 @@ async def music_select_handler(_, query: CallbackQuery):
 
 
 # Placeholder for additional callback handlers
-@bot.on_callback_query(filters.regex("^music_"))
+@bot.on_callback_query(filters.regex("^music_")& is_download_callback_rate_limited)
 async def music_callback_handler(_, query: CallbackQuery):
     """
     Handle music-related callback queries

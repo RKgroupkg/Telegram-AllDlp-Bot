@@ -7,10 +7,10 @@ import aiofiles
 from pyrogram import filters
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from src import bot
-from src.helpers.filters import is_ratelimited
+from src.helpers.filters import is_rate_limited,is_download_callback_rate_limited
 from src.helpers.pasting_services import katbin_paste, telegraph_paste, telegraph_image_paste
 
-@bot.on_message(filters.command("paste") & is_ratelimited)
+@bot.on_message(filters.command("paste") & is_rate_limited)
 async def paste(_, message: Message):
     """Handles pasting of text or images with interactive options."""
     paste_usage = "♚ **Usage:** Paste text or image. Reply to a text file, text message, image, or type text after the command.\n\n**Example:** /paste type your text"
@@ -54,7 +54,7 @@ async def paste(_, message: Message):
     else:
         await paste_reply.edit(paste_usage)
 
-@bot.on_callback_query(filters.regex("paste_"))
+@bot.on_callback_query(filters.regex("paste_")& is_download_callback_rate_limited)
 async def paste_callback(client, callback_query):
     """Handles callback queries from paste service selection buttons."""
     data = callback_query.data
