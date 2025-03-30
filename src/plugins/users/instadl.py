@@ -31,12 +31,59 @@ from src.config import RAPID_API_KEYS
 from src.helpers.start_constants import BOT_NAME  # bot name
 from src.logging import LOGGER
 from src.helpers.dlp._rex import INSTAGRAM_URL_PATTERN 
-from src.helpers.dlp.Insta_dl.instadl import download_instagram_video
+
 
 # Cache for storing recently processed Instagram media (to avoid repeated API calls)
 MEDIA_CACHE = {}
 CACHE_TTL = 3600  # Cache time-to-live in seconds (1 hour)
 
+
+class InstagramDownloader:
+    """
+    A class to handle Instagram media downloading functionality.
+    """
+    
+    @staticmethod
+    async def extract_media_url(instagram_url: str) -> Optional[Dict[str, Any]]:
+        """
+        Extract media URLs from an Instagram post.
+        
+        Args:
+            instagram_url: The Instagram post URL
+            
+        Returns:
+            Dictionary containing media information or None if extraction failed
+        """
+        # Check cache first
+        if instagram_url in MEDIA_CACHE:
+            LOGGER(__name__).info(f"Using cached data for: {instagram_url}")
+            return MEDIA_CACHE[instagram_url]
+            
+        try:
+            LOGGER(__name__).info(f"Extracting media from: {instagram_url}")
+            result = get_instagram_post_data(instagram_url, RAPID_API_KEYS)
+            if result:
+                # Cache the result
+                MEDIA_CACHE[instagram_url] = result
+                
+                # Schedule cache cleanup
+                asyncio.create_task(InstagramDownloader._cleanup_cache(instagram_url))
+                
+                return result
+            else:
+                LOGGER(__name__).error("No media URLs extracted")
+                return None
+        except Exception as e:
+            LOGGER(__name__).error(f"Error extracting media URL: {e}")
+            return None
+    
+    @staticmethod
+    async def _cleanup_cache(url: str) -> None:
+        """Clean up cached entries after TTL expires."""
+        await asyncio.sleep(CACHE_TTL)
+        if url in MEDIA_CACHE:
+            del MEDIA_CACHE[url]
+            LOGGER(__name__).debug(f"Removed {url} from cache")
 
 
 # Function to extract all Instagram URLs from a message
@@ -370,7 +417,7 @@ async def instagram_help_handler(client: Client, message: Message) -> None:
         "- Instagram posts: `instagram.com/p/...`\n"
         "- Instagram reels: `instagram.com/reel/...`\n"
         "- IGTV: `instagram.com/tv/...`\n\n"
-        "**Note:** The bot works in private chats, groups, and inline mode."
+        "**Note:** The bot works in private chats, groups, and inline mode. And if this isnt working use /dl instead"
     )
     
     await message.reply_text(
