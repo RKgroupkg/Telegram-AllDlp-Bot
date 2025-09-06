@@ -21,7 +21,7 @@ from src.logging import LOGGER
 # for render and koyeb comment it ou uf you dont need it
 
 service = KeepAliveService(
-    log_level=log.ERROR, ping_interval=60  # no need for info  # Ping every 1 minutes
+    log_level=log.ERROR, ping_interval=40  # no need for info  # Ping every 40 sec
 )
 
 
