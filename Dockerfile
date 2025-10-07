@@ -6,7 +6,7 @@
 # https://hub.docker.com/_/python
 
 
-FROM python:3.10-slim
+FROM python:3.14-slim
 
 # Set the working directory in the container.
 WORKDIR /app
