@@ -69,6 +69,8 @@ RAPID_API_KEYS = parse_json_env("RAPID_API_KEYS")
 API_ID = int(getenv("API_ID", 0))
 API_HASH = getenv("API_HASH", "")
 BOT_TOKEN = getenv("BOT_TOKEN", "")
+GITHUB_REPO = "RKgroupkg/Telegram-AllDlp-Bot"  # <-- replace with your actual username/repo name
+
 
 # YT config
 COOKIE_ROTATION_COOLDOWN: int = int(getenv("COOKIE_ROTATION_COOLDOWN", "600"))
