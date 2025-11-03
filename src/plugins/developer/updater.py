@@ -48,19 +48,90 @@ def restart_bot():
 
 @bot.on_message(filters.command("update") & dev_cmd)
 async def update(_, message: Message):
-    """Pull latest commits from GitHub and redeploy."""
-    msg = await message.reply_text("🔄 Pulling latest commits from GitHub...", quote=True)
-    out, err, code = await run_cmd(["git", "pull"])
+    """
+    Check for new commits in the GitHub repo. 
+    If available, pull and restart. 
+    If not, check outdated packages and report.
+    """
 
+    msg = await message.reply_text("🔍 Checking for new commits on GitHub...", quote=True)
+    GITHUB_REPO = "Rkgroup/QuickDl"  # <-- replace with your actual username/repo name
+
+    # Step 1: Determine the current local commit hash
+    out, err, code = await run_cmd(["git", "rev-parse", "HEAD"])
     if code != 0:
-        await msg.edit(f"❌ Git update failed:\n`{err or out}`")
-        log.error(f"Git pull failed: {err or out}")
+        await msg.edit(f"⚠️ Failed to read local commit:\n`{err or out}`")
+        log.error(f"Failed to get local commit hash: {err or out}")
+        return
+    local_commit = out.strip()
+
+    # Step 2: Get latest remote commit from GitHub
+    api_url = f"https://api.github.com/repos/{GITHUB_REPO}/commits/main"
+    remote_data = safe_fetch_json(api_url)
+    if not remote_data:
+        await msg.edit("⚠️ Could not fetch latest commit info from GitHub.")
         return
 
-    updated_lines = "\n".join(line for line in out.splitlines()[:6])
-    await msg.edit(f"✅ Bot updated successfully:\n```\n{updated_lines}\n```\nRestarting now...")
-    log.info(f"Bot updated successfully at {datetime.now().isoformat()}")
-    restart_bot()
+    remote_commit = remote_data.get("sha", "")
+    commit_msg = remote_data.get("commit", {}).get("message", "")
+    commit_url = remote_data.get("html_url", f"https://github.com/{GITHUB_REPO}/commits")
+
+    # Step 3: Compare
+    if local_commit != remote_commit:
+        log.info(f"New commit found: {remote_commit[:7]} — pulling updates.")
+        await msg.edit(
+            f"🪄 **New commit available!**\n"
+            f"• Commit: `{remote_commit[:7]}`\n"
+            f"• Message: _{commit_msg}_\n"
+            f"• [View on GitHub]({commit_url})\n\n"
+            f"⬇️ Pulling changes and restarting..."
+        )
+        out, err, code = await run_cmd(["git", "pull"])
+        if code != 0:
+            await msg.edit(f"❌ Git pull failed:\n`{err or out}`")
+            log.error(f"Git pull failed: {err or out}")
+            return
+
+        await msg.edit("✅ Bot updated successfully. Restarting...")
+        log.info(f"Pulled latest commit {remote_commit[:7]} successfully.")
+        restart_bot()
+        return
+
+    # Step 4: If no new commits, check outdated packages
+    await msg.edit("ℹ️ No new commits. Checking dependencies for updates...")
+    out, err, code = await run_cmd(
+        [sys.executable, "-m", "pip", "list", "--outdated", "--format", "json"]
+    )
+
+    if code != 0:
+        await msg.edit(f"⚠️ Failed to check packages:\n`{err or out}`")
+        log.error(f"pip list failed: {err or out}")
+        return
+
+    try:
+        outdated = json.loads(out)
+    except Exception as e:
+        await msg.edit(f"⚠️ Could not parse pip output: {e}")
+        return
+
+    if not outdated:
+        await msg.edit(
+            f"✅ All dependencies are up-to-date!\n"
+            f"• No new commits in repo.\n"
+            f"• Local commit: `{local_commit[:7]}`"
+        )
+        log.info("All dependencies are up-to-date.")
+        return
+
+    # Step 5: Show outdated dependencies in a nice summary
+    text_lines = ["📦 **Outdated Packages Detected:**"]
+    for pkg in outdated:
+        text_lines.append(
+            f"• `{pkg['name']}`: {pkg['version']} → {pkg['latest_version']}"
+        )
+
+    await msg.edit("\n".join(text_lines[:30]))  # Limit to 30 packages
+    log.info(f"Outdated dependencies found: {[p['name'] for p in outdated]}")
 
 
 # ----------------------------- /restart command ----------------------------- #
