@@ -1,0 +1,54 @@
+name: Render Keep-Alive & Auto-Redeploy
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"     # every 15 minutes
+  workflow_dispatch:            # allow manual trigger too
+
+jobs:
+  check-render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_APP_URL: https://quickdl.onrender.com/alive
+      RETRY_COUNT: 3
+      RETRY_DELAY: 20
+      RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+
+    steps:
+      - name: 🌐 Check Render App Health
+        id: ping
+        run: |
+          echo "Checking Render app at: $RENDER_APP_URL"
+          success=false
+          for attempt in $(seq 1 $RETRY_COUNT); do
+            echo "Attempt $attempt of $RETRY_COUNT..."
+            if curl -fsS --max-time 10 "$RENDER_APP_URL" > /dev/null; then
+              echo "✅ App responded successfully."
+              success=true
+              break
+            else
+              echo "⚠️ Ping failed (attempt $attempt). Retrying in $RETRY_DELAY seconds..."
+              sleep $RETRY_DELAY
+            fi
+          done
+
+          echo "success=$success" >> $GITHUB_OUTPUT
+
+      - name: 🧠 Decide and Redeploy if Needed
+        if: steps.ping.outputs.success == 'false'
+        run: |
+          echo "Render app failed all checks. Initiating safe redeploy..."
+          http_code=$(curl -s -o response.txt -w "%{http_code}" -X POST "$RENDER_DEPLOY_HOOK")
+          if [ "$http_code" -eq 200 ] || [ "$http_code" -eq 201 ]; then
+            echo "✅ Redeploy triggered successfully."
+          else
+            echo "❌ Redeploy failed with HTTP code $http_code."
+            echo "--- Response ---"
+            cat response.txt
+            exit 1
+          fi
+
+      - name: ✅ Log Healthy App
+        if: steps.ping.outputs.success == 'true'
+        run: echo "✅ Render app is up. No redeploy needed."
