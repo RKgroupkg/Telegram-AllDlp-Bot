@@ -15,8 +15,9 @@ from src import bot
 from src.helpers.filters import dev_cmd
 from src.logging import LOGGER
 
-log = LOGGER(__name__)
+from src.config import GITHUB_REPO
 
+log = LOGGER(__name__)
 # ----------------------------- Utility helpers ----------------------------- #
 
 async def run_cmd(cmd: list[str]) -> tuple[str, str, int]:
@@ -55,8 +56,7 @@ async def update(_, message: Message):
     """
 
     msg = await message.reply_text("🔍 Checking for new commits on GitHub...", quote=True)
-    GITHUB_REPO = "Rkgroup/QuickDl"  # <-- replace with your actual username/repo name
-
+    
     # Step 1: Determine the current local commit hash
     out, err, code = await run_cmd(["git", "rev-parse", "HEAD"])
     if code != 0:
