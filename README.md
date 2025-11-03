@@ -8,8 +8,10 @@
   [![Telegram Bot](https://img.shields.io/badge/Try%20it%20now-@Quick__dlbot-blue?style=for-the-badge&logo=telegram)](https://t.me/Quick_dlbot)
   [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](https://github.com/RKgroupkg/Pyrogram-Bot/blob/main/LICENSE)
   [![Python](https://img.shields.io/badge/Python-3.8%2B-yellow?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-</div>
+
 [![Render Keep-Alive & Auto-Redeploy](https://github.com/RKgroupkg/Telegram-AllDlp-Bot/actions/workflows/render-keepalive.yml/badge.svg)](https://github.com/RKgroupkg/Telegram-AllDlp-Bot/actions/workflows/render-keepalive.yml)
+</div>
+
 ---
 
 ## 📋 Table of Contents
