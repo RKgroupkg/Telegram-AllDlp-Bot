@@ -47,6 +47,13 @@ def restart_bot():
 
 # ----------------------------- /update command ----------------------------- #
 
+from pyrogram.enums import ParseMode
+from pyrogram.utils import escape_markdown
+
+def md_safe(text: str) -> str:
+    """Escape Markdown formatting-sensitive characters."""
+    return escape_markdown(str(text or ""), version=2)
+
 @bot.on_message(filters.command("update") & dev_cmd)
 async def update(_, message: Message):
     """
@@ -60,7 +67,10 @@ async def update(_, message: Message):
     # Step 1: Determine the current local commit hash
     out, err, code = await run_cmd(["git", "rev-parse", "HEAD"])
     if code != 0:
-        await msg.edit(f"⚠️ Failed to read local commit:\n`{err or out}`")
+        await msg.edit(
+            f"⚠️ Failed to read local commit:\n`{md_safe(err or out)}`",
+            parse_mode=ParseMode.MARKDOWN,
+        )
         log.error(f"Failed to get local commit hash: {err or out}")
         return
     local_commit = out.strip()
@@ -69,7 +79,7 @@ async def update(_, message: Message):
     api_url = f"https://api.github.com/repos/{GITHUB_REPO}/commits/main"
     remote_data = safe_fetch_json(api_url)
     if not remote_data:
-        await msg.edit("⚠️ Could not fetch latest commit info from GitHub.")
+        await msg.edit("⚠️ Could not fetch latest commit info from GitHub.", parse_mode=None)
         return
 
     remote_commit = remote_data.get("sha", "")
@@ -81,59 +91,67 @@ async def update(_, message: Message):
         log.info(f"New commit found: {remote_commit[:7]} — pulling updates.")
         await msg.edit(
             f"🪄 **New commit available!**\n"
-            f"• Commit: `{remote_commit[:7]}`\n"
-            f"• Message: _{commit_msg}_\n"
+            f"• Commit: `{md_safe(remote_commit[:7])}`\n"
+            f"• Message: _{md_safe(commit_msg)}_\n"
             f"• [View on GitHub]({commit_url})\n\n"
-            f"⬇️ Pulling changes and restarting..."
+            f"⬇️ Pulling changes and restarting...",
+            parse_mode=ParseMode.MARKDOWN,
+            disable_web_page_preview=True,
         )
         out, err, code = await run_cmd(["git", "pull"])
         if code != 0:
-            await msg.edit(f"❌ Git pull failed:\n`{err or out}`")
+            await msg.edit(
+                f"❌ Git pull failed:\n`{md_safe(err or out)}`",
+                parse_mode=ParseMode.MARKDOWN,
+            )
             log.error(f"Git pull failed: {err or out}")
             return
 
-        await msg.edit("✅ Bot updated successfully. Restarting...")
+        await msg.edit("✅ Bot updated successfully. Restarting...", parse_mode=None)
         log.info(f"Pulled latest commit {remote_commit[:7]} successfully.")
         restart_bot()
         return
 
     # Step 4: If no new commits, check outdated packages
-    await msg.edit("ℹ️ No new commits. Checking dependencies for updates...")
+    await msg.edit("ℹ️ No new commits. Checking dependencies for updates...", parse_mode=None)
     out, err, code = await run_cmd(
         [sys.executable, "-m", "pip", "list", "--outdated", "--format", "json"]
     )
 
     if code != 0:
-        await msg.edit(f"⚠️ Failed to check packages:\n`{err or out}`")
+        await msg.edit(
+            f"⚠️ Failed to check packages:\n`{md_safe(err or out)}`",
+            parse_mode=ParseMode.MARKDOWN,
+        )
         log.error(f"pip list failed: {err or out}")
         return
 
     try:
         outdated = json.loads(out)
     except Exception as e:
-        await msg.edit(f"⚠️ Could not parse pip output: {e}")
+        await msg.edit(f"⚠️ Could not parse pip output: {md_safe(e)}", parse_mode=None)
         return
 
     if not outdated:
         await msg.edit(
             f"✅ All dependencies are up-to-date!\n"
             f"• No new commits in repo.\n"
-            f"• Local commit: `{local_commit[:7]}`"
+            f"• Local commit: `{md_safe(local_commit[:7])}`",
+            parse_mode=ParseMode.MARKDOWN,
         )
         log.info("All dependencies are up-to-date.")
         return
 
     # Step 5: Show outdated dependencies in a nice summary
     text_lines = ["📦 **Outdated Packages Detected:**"]
-    for pkg in outdated:
+    for pkg in outdated[:30]:  # limit output
         text_lines.append(
-            f"• `{pkg['name']}`: {pkg['version']} → {pkg['latest_version']}"
+            f"• `{md_safe(pkg['name'])}`: {md_safe(pkg['version'])} → {md_safe(pkg['latest_version'])}"
         )
 
-    await msg.edit("\n".join(text_lines[:30]))  # Limit to 30 packages
+    await msg.edit("\n".join(text_lines), parse_mode=ParseMode.MARKDOWN)
     log.info(f"Outdated dependencies found: {[p['name'] for p in outdated]}")
-
-
+    
 # ----------------------------- /restart command ----------------------------- #
 
 @bot.on_message(filters.command("restart") & dev_cmd)
