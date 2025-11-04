@@ -47,12 +47,19 @@ def restart_bot():
 
 # ----------------------------- /update command ----------------------------- #
 
+import re
 from pyrogram.enums import ParseMode
-from pyrogram.utils import escape_markdown
 
-def md_safe(text: str) -> str:
-    """Escape Markdown formatting-sensitive characters."""
-    return escape_markdown(str(text or ""), version=2)
+def escape_markdown(text: str) -> str:
+    """
+    Escape text for Telegram MarkdownV2.
+    Telegram’s MarkdownV2 treats many punctuation marks as control symbols,
+    so this replaces them with escaped versions using backslashes.
+    """
+    if not text:
+        return ""
+    escape_chars = r"_*[]()~`>#+-=|{}.!\\"
+    return re.sub(f"([{re.escape(escape_chars)}])", r"\\\1", str(text))
 
 @bot.on_message(filters.command("update") & dev_cmd)
 async def update(_, message: Message):
@@ -68,7 +75,7 @@ async def update(_, message: Message):
     out, err, code = await run_cmd(["git", "rev-parse", "HEAD"])
     if code != 0:
         await msg.edit(
-            f"⚠️ Failed to read local commit:\n`{md_safe(err or out)}`",
+            f"⚠️ Failed to read local commit:\n`{escape_markdown(err or out)}`",
             parse_mode=ParseMode.MARKDOWN,
         )
         log.error(f"Failed to get local commit hash: {err or out}")
@@ -91,8 +98,8 @@ async def update(_, message: Message):
         log.info(f"New commit found: {remote_commit[:7]} — pulling updates.")
         await msg.edit(
             f"🪄 **New commit available!**\n"
-            f"• Commit: `{md_safe(remote_commit[:7])}`\n"
-            f"• Message: _{md_safe(commit_msg)}_\n"
+            f"• Commit: `{escape_markdown(remote_commit[:7])}`\n"
+            f"• Message: _{escape_markdown(commit_msg)}_\n"
             f"• [View on GitHub]({commit_url})\n\n"
             f"⬇️ Pulling changes and restarting...",
             parse_mode=ParseMode.MARKDOWN,
@@ -101,7 +108,7 @@ async def update(_, message: Message):
         out, err, code = await run_cmd(["git", "pull"])
         if code != 0:
             await msg.edit(
-                f"❌ Git pull failed:\n`{md_safe(err or out)}`",
+                f"❌ Git pull failed:\n`{escape_markdown(err or out)}`",
                 parse_mode=ParseMode.MARKDOWN,
             )
             log.error(f"Git pull failed: {err or out}")
@@ -120,7 +127,7 @@ async def update(_, message: Message):
 
     if code != 0:
         await msg.edit(
-            f"⚠️ Failed to check packages:\n`{md_safe(err or out)}`",
+            f"⚠️ Failed to check packages:\n`{escape_markdown(err or out)}`",
             parse_mode=ParseMode.MARKDOWN,
         )
         log.error(f"pip list failed: {err or out}")
@@ -129,14 +136,14 @@ async def update(_, message: Message):
     try:
         outdated = json.loads(out)
     except Exception as e:
-        await msg.edit(f"⚠️ Could not parse pip output: {md_safe(e)}", parse_mode=None)
+        await msg.edit(f"⚠️ Could not parse pip output: {escape_markdown(e)}", parse_mode=None)
         return
 
     if not outdated:
         await msg.edit(
             f"✅ All dependencies are up-to-date!\n"
             f"• No new commits in repo.\n"
-            f"• Local commit: `{md_safe(local_commit[:7])}`",
+            f"• Local commit: `{escape_markdown(local_commit[:7])}`",
             parse_mode=ParseMode.MARKDOWN,
         )
         log.info("All dependencies are up-to-date.")
@@ -146,12 +153,12 @@ async def update(_, message: Message):
     text_lines = ["📦 **Outdated Packages Detected:**"]
     for pkg in outdated[:30]:  # limit output
         text_lines.append(
-            f"• `{md_safe(pkg['name'])}`: {md_safe(pkg['version'])} → {md_safe(pkg['latest_version'])}"
+            f"• `{escape_markdown(pkg['name'])}`: "
+            f"{escape_markdown(pkg['version'])} → {escape_markdown(pkg['latest_version'])}"
         )
 
     await msg.edit("\n".join(text_lines), parse_mode=ParseMode.MARKDOWN)
     log.info(f"Outdated dependencies found: {[p['name'] for p in outdated]}")
-    
 # ----------------------------- /restart command ----------------------------- #
 
 @bot.on_message(filters.command("restart") & dev_cmd)
