@@ -41,7 +41,7 @@ def setup_logging() -> None:
     logging.getLogger("apscheduler").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("keep-alive-ping").setLevel(logging.WARNING)
-    logging.getLogger("werkzeug'").setLevel(logging.WARNING)
+    logging.getLogger("werkzeug").setLevel(logging.WARNING)
 
 def LOGGER(name: str) -> logging.Logger:
     """
