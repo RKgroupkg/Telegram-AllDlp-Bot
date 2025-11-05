@@ -1,13 +1,14 @@
 #  Copyright (c) 2025 Rkgroup.
-#  Quick Dl is an open-source Downloader bot licensed under MIT.
+#  Quick DL is an open-source Downloader bot licensed under MIT.
 #  All rights reserved where applicable.
-#
-#
 
-from typing import List
+from __future__ import annotations
+from typing import List, Optional
+import re
+import asyncio
 
 from pyrogram import filters
-from pyrogram.types import Message
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 from cookies._cookies.fetchCookies import save_all_cookies
 from src import bot
@@ -16,31 +17,9 @@ from src.helpers.filters import dev_cmd
 from src.logging import LOGGER
 
 
-@bot.on_message(filters.command(["cookie", "cookies"]) & dev_cmd)
-async def shell_executor(_, message: Message):
-    """Executes command in terminal via bot."""
-
-    if len(message.command) < 2:
-        cookies_usage = "**USAGE:** Adds cookies directly to the bot.\n\n**Example: **<pre>/cookies <paste_bin_url> with base64 encoded data in that/pre>"
-        return await message.reply_text(cookies_usage, quote=True)
-
-    args = parse_cmd_args(
-        message.text.split(maxsplit=1)[1] if len(message.text.split()) > 1 else ""
-    )
-    msg = await message.reply_text(f"♔ **Processing Url:** __{args}__", quote=True)
-
-    try:
-
-        result = await save_all_cookies(args)
-        new_cookie_count = await cookie_manager.refresh_cookies()
-        cookies_text = ',\n'.join(result)  # Ensures proper handling
-        msg = await msg.edit_text(
-            f"""♔ **The cookies saved to:** __{cookies_text}__\n\n♔ **The total Cookies now is:** __{new_cookie_count}__ \n\n use `/shell ls cookies`to verify it."""
-        )
-    except Exception as error:
-        LOGGER(__name__).warning(f"{error}")
-        return await msg.edit(f"--♔ **Error**--\n\n`{error}`")
-
+# ----------------------------
+# Utility Functions
+# ----------------------------
 
 def parse_cmd_args(message: str, separator: str = ",") -> List[str]:
     """
@@ -51,14 +30,99 @@ def parse_cmd_args(message: str, separator: str = ",") -> List[str]:
         separator (str, optional): The separator used to split arguments. Defaults to ','.
 
     Returns:
-        List[str]: A list of parsed arguments. Returns an empty list if no arguments are provided.
+        List[str]: A list of parsed arguments.
     """
-    # Strip any leading/trailing whitespace
     cleaned_message = message.strip()
-
-    # If the message is empty, return an empty list
     if not cleaned_message:
         return []
+    return [arg.strip() for arg in cleaned_message.split(separator) if arg.strip()]
 
-    # Split the message using the specified separator
-    return [arg.strip() for arg in cleaned_message.split(separator)]
+
+def extract_url(text: str) -> Optional[str]:
+    """Extracts the first valid URL from text (for pastebin/gist/etc)."""
+    url_pattern = r"(https?://[^\s]+)"
+    matches = re.findall(url_pattern, text)
+    return matches[0] if matches else None
+
+
+# ----------------------------
+# Core Bot Handler
+# ----------------------------
+
+@bot.on_message(filters.command(["cookie", "cookies"]) & dev_cmd)
+async def cookie_handler(_, message: Message):
+    """
+    Handle cookie import via /cookies command.
+    
+    Usage:
+        /cookies <pastebin_or_url_with_base64_data>
+    """
+    if len(message.command) < 2:
+        usage_text = (
+            "🍪 **Usage:** Adds cookies directly to the bot.\n\n"
+            "**Example:**\n"
+            "`/cookies https://pastebin.com/raw/xxxxx`\n\n"
+            "Ensure the link contains base64-encoded cookie data."
+        )
+        return await message.reply_text(usage_text, quote=True)
+
+    args_text = message.text.split(maxsplit=1)[1]
+    urls = parse_cmd_args(args_text)
+
+    if not urls:
+        return await message.reply_text("⚠️ No valid URLs provided.", quote=True)
+
+    msg = await message.reply_text("🔄 **Fetching and saving cookies...**", quote=True)
+    processed_results = []
+    success_count = 0
+    fail_count = 0
+
+    # Sequential or parallel cookie loading
+    for url in urls:
+        url_to_process = extract_url(url) or url
+        try:
+            await asyncio.sleep(1)  # simulate processing delay
+            result = await save_all_cookies(url_to_process)
+            success_count += 1
+            processed_results.extend(result)
+        except Exception as e:
+            fail_count += 1
+            LOGGER(__name__).warning(f"Failed to save cookies from {url_to_process}: {e}")
+
+    try:
+        total_cookies = await cookie_manager.refresh_cookies()
+    except Exception as refresh_err:
+        LOGGER(__name__).error(f"Cookie refresh failed: {refresh_err}")
+        total_cookies = "Unknown"
+
+    cookies_summary = (
+        f"✅ **Saved:** {success_count} | ❌ **Failed:** {fail_count}\n\n"
+        f"📦 **Total cookies now:** `{total_cookies}`\n"
+        f"🗂️ Saved to: `{', '.join(processed_results) if processed_results else 'N/A'}`"
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🧩 Verify cookies", callback_data="verify_cookies")]]
+    )
+
+    await msg.edit_text(
+        f"🍪 **Cookie Import Summary**\n\n{cookies_summary}\n\n"
+        "_Use_ `/shell ls cookies` _to verify manually._",
+        reply_markup=keyboard,
+    )
+
+
+# ----------------------------
+# Optional Callback Handler
+# ----------------------------
+
+@bot.on_callback_query(filters.regex("^verify_cookies$"))
+async def verify_cookies_cb(_, query):
+    """Responds to the verify cookies button."""
+    await query.answer("🔍 Checking cookies...")
+    try:
+        count = await cookie_manager.refresh_cookies()
+        await query.edit_message_text(f"✅ **Total cookies currently loaded:** `{count}`")
+    except Exception as e:
+        LOGGER(__name__).error(f"Verification error: {e}")
+        await query.edit_message_text(f"⚠️ Error verifying cookies:\n`{e}`")
