@@ -16,6 +16,8 @@ uvloop
 pillow
 spotipy
 ffmpeg
+mutagen
+pyotp
 yt_dlp
 aiohttp
 pydantic
