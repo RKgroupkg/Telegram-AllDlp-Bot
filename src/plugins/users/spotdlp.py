@@ -8,11 +8,15 @@ from typing import Any, Dict, Optional, Tuple, List
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 from enum import Enum
+from functools import wraps
+import time
 
 import spotipy
 from pyrogram import filters
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from spotipy.oauth2 import SpotifyClientCredentials
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from src import bot
 from src.config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, CATCH_PATH
@@ -50,23 +54,29 @@ class AudioFormat(Enum):
 # UI Constants
 class Emoji:
     """Consistent emoji set for UI"""
-    MUSIC = "♪"           # Musical note
-    SPARKLES = "✦"        # Sparkle
-    DOWNLOAD = "↓"        # Down arrow
-    CHECK = "✓"           # Check mark
-    ERROR = "✗"           # X mark
-    WARNING = "⚠"         # Warning
-    INFO = "ⓘ"            # Info circle
-    LOADING = "⌛"        # Hourglass
-    SEARCH = "⌕"          # Search
-    ALBUM = "◉"           # Disc
-    ARTIST = "♬"          # Music notes
-    CLOCK = "⏲"           # Timer
-    STAR = "★"            # Star
-    QUALITY = "◆"         # Diamond
-    FILE = "▤"            # File
-    CANCEL = "⊗"          # Cancel
+    MUSIC = "♪"
+    SPARKLES = "✦"
+    DOWNLOAD = "↓"
+    CHECK = "✓"
+    ERROR = "✗"
+    WARNING = "⚠"
+    INFO = "ⓘ"
+    LOADING = "⌛"
+    SEARCH = "⌕"
+    ALBUM = "◉"
+    ARTIST = "♬"
+    CLOCK = "⏲"
+    STAR = "★"
+    QUALITY = "◆"
+    FILE = "▤"
+    CANCEL = "⊗"
 
+
+# Network and retry configuration
+SPOTIFY_REQUEST_TIMEOUT = 15  # seconds
+SPOTIFY_MAX_RETRIES = 3
+SPOTIFY_RETRY_BACKOFF_FACTOR = 1.5  # exponential backoff
+SPOTIFY_RETRY_STATUS_CODES = [429, 500, 502, 503, 504]
 
 # Download timeouts and retries
 DOWNLOAD_TIMEOUT = 30
@@ -107,22 +117,140 @@ class TrackMetadata:
         return f"{Emoji.QUALITY} High-Quality Sources Available" if self.has_high_quality_sources else f"{Emoji.INFO} YouTube Only"
 
 
-# ==================== INITIALIZATION ====================
+# ==================== RETRY DECORATOR ====================
 
-# Initialize Spotify client
-spotify_client = None
-if SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET:
+def retry_on_network_error(max_attempts=3, backoff_factor=1.5, exceptions=(Exception,)):
+    """
+    Decorator for retrying functions on network errors with exponential backoff
+    
+    Args:
+        max_attempts: Maximum number of retry attempts
+        backoff_factor: Multiplier for delay between retries
+        exceptions: Tuple of exceptions to catch
+    """
+    def decorator(func):
+        @wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            last_exception = None
+            
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    return await func(*args, **kwargs)
+                except exceptions as e:
+                    last_exception = e
+                    
+                    if attempt == max_attempts:
+                        logger.error(
+                            f"{Emoji.ERROR} [{func.__name__}] Failed after {max_attempts} attempts: {e}"
+                        )
+                        raise
+                    
+                    delay = backoff_factor ** (attempt - 1)
+                    logger.warning(
+                        f"{Emoji.WARNING} [{func.__name__}] Attempt {attempt}/{max_attempts} failed: {e}. "
+                        f"Retrying in {delay:.1f}s..."
+                    )
+                    await asyncio.sleep(delay)
+            
+            raise last_exception
+        
+        @wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            last_exception = None
+            
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as e:
+                    last_exception = e
+                    
+                    if attempt == max_attempts:
+                        logger.error(
+                            f"{Emoji.ERROR} [{func.__name__}] Failed after {max_attempts} attempts: {e}"
+                        )
+                        raise
+                    
+                    delay = backoff_factor ** (attempt - 1)
+                    logger.warning(
+                        f"{Emoji.WARNING} [{func.__name__}] Attempt {attempt}/{max_attempts} failed: {e}. "
+                        f"Retrying in {delay:.1f}s..."
+                    )
+                    time.sleep(delay)
+            
+            raise last_exception
+        
+        return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
+    
+    return decorator
+
+
+# ==================== SPOTIFY CLIENT INITIALIZATION ====================
+
+def create_robust_spotify_client():
+    """
+    Create Spotify client with robust connection handling
+    
+    Returns:
+        Configured spotipy.Spotify client or None
+    """
+    if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
+        logger.warning("⚠ Spotify credentials not configured")
+        return None
+    
     try:
+        # Configure retry strategy
+        retry_strategy = Retry(
+            total=SPOTIFY_MAX_RETRIES,
+            backoff_factor=SPOTIFY_RETRY_BACKOFF_FACTOR,
+            status_forcelist=SPOTIFY_RETRY_STATUS_CODES,
+            allowed_methods=["GET", "POST"],
+            raise_on_status=False
+        )
+        
+        # Create HTTP adapter with retry strategy
+        adapter = HTTPAdapter(
+            max_retries=retry_strategy,
+            pool_connections=10,
+            pool_maxsize=20,
+            pool_block=False
+        )
+        
+        # Configure auth manager
         auth_manager = SpotifyClientCredentials(
-            client_id=SPOTIFY_CLIENT_ID, 
+            client_id=SPOTIFY_CLIENT_ID,
             client_secret=SPOTIFY_CLIENT_SECRET
         )
-        spotify_client = spotipy.Spotify(auth_manager=auth_manager)
-        logger.info("✓ Spotify client initialized successfully")
+        
+        # Create Spotify client
+        client = spotipy.Spotify(
+            auth_manager=auth_manager,
+            requests_timeout=SPOTIFY_REQUEST_TIMEOUT,
+            retries=SPOTIFY_MAX_RETRIES,
+            status_forcelist=SPOTIFY_RETRY_STATUS_CODES,
+            backoff_factor=SPOTIFY_RETRY_BACKOFF_FACTOR
+        )
+        
+        # Mount adapter for both HTTP and HTTPS
+        client._session.mount("http://", adapter)
+        client._session.mount("https://", adapter)
+        
+        # Configure session headers
+        client._session.headers.update({
+            'Connection': 'keep-alive',
+            'Accept-Encoding': 'gzip, deflate',
+            'User-Agent': 'QuickDL-Bot/1.0'
+        })
+        
+        logger.info("✓ Spotify client initialized with robust connection handling")
+        return client
+        
     except Exception as e:
         logger.error(f"✗ Failed to initialize Spotify client: {e}")
-else:
-    logger.warning("⚠ Spotify credentials not configured")
+        return None
+
+
+# Initialize Spotify client
+spotify_client = create_robust_spotify_client()
 
 # Track cache with expiration
 track_cache: Dict[str, TrackMetadata] = {}
@@ -303,9 +431,14 @@ def find_downloaded_file(
     return None
 
 
+@retry_on_network_error(
+    max_attempts=3,
+    backoff_factor=1.5,
+    exceptions=(Exception,)
+)
 async def download_thumbnail(url: str, output_path: str) -> Optional[str]:
     """
-    Download and save thumbnail image
+    Download and save thumbnail image with retry logic
     
     Args:
         url: Image URL
@@ -335,7 +468,7 @@ async def download_thumbnail(url: str, output_path: str) -> Optional[str]:
         
     except Exception as e:
         logger.warning(f"Thumbnail download error: {e}")
-        return None
+        raise  # Let retry decorator handle it
 
 
 def cleanup_files(*file_paths: str) -> None:
@@ -351,9 +484,16 @@ def cleanup_files(*file_paths: str) -> None:
 
 # ==================== SPOTIFY API ====================
 
+@retry_on_network_error(
+    max_attempts=SPOTIFY_MAX_RETRIES,
+    backoff_factor=SPOTIFY_RETRY_BACKOFF_FACTOR,
+    exceptions=(
+        Exception,  # Catch all network-related exceptions
+    )
+)
 async def get_spotify_track_info(track_id: str) -> Optional[TrackMetadata]:
     """
-    Fetch comprehensive track information from Spotify
+    Fetch comprehensive track information from Spotify with robust error handling
     
     Args:
         track_id: Spotify track ID
@@ -366,7 +506,11 @@ async def get_spotify_track_info(track_id: str) -> Optional[TrackMetadata]:
         return None
 
     try:
-        track = await asyncio.to_thread(spotify_client.track, track_id)
+        # Use asyncio.wait_for to add additional timeout protection
+        track = await asyncio.wait_for(
+            asyncio.to_thread(spotify_client.track, track_id),
+            timeout=SPOTIFY_REQUEST_TIMEOUT + 5  # Add buffer to thread timeout
+        )
         
         metadata = TrackMetadata(
             title=track["name"],
@@ -386,9 +530,12 @@ async def get_spotify_track_info(track_id: str) -> Optional[TrackMetadata]:
         logger.info(f"{Emoji.MUSIC} Fetched: {metadata.title} - {metadata.artist}")
         return metadata
         
+    except asyncio.TimeoutError:
+        logger.error(f"Spotify API timeout for track {track_id}")
+        raise Exception("Spotify API request timed out")
     except Exception as e:
-        logger.error(f"Error fetching Spotify track: {e}", exc_info=True)
-        return None
+        logger.error(f"Error fetching Spotify track {track_id}: {e}")
+        raise  # Let retry decorator handle it
 
 
 # ==================== UI MARKUP CREATION ====================
@@ -832,12 +979,12 @@ async def spotify_track_handler(_, message: Message):
     )
     
     try:
-        # Fetch track metadata
+        # Fetch track metadata with retry logic
         metadata = await get_spotify_track_info(track_id)
         if not metadata:
             await status_msg.edit_text(
                 f"{Emoji.ERROR} <b>Failed to fetch track information</b>\n\n"
-                f"<i>Please try again or use a different link.</i>"
+                f"<i>The Spotify service may be temporarily unavailable. Please try again later.</i>"
             )
             return
         
@@ -868,11 +1015,18 @@ async def spotify_track_handler(_, message: Message):
         logger.info(f"{Emoji.CHECK} Source selection presented for: {metadata.title}")
     
     except Exception as e:
-        await status_msg.edit_text(
-            f"{Emoji.ERROR} <b>An error occurred</b>\n\n"
-            f"<i>{str(e)[:200]}</i>"
+        error_msg = str(e)
+        user_friendly_msg = (
+            f"{Emoji.ERROR} <b>Connection Error</b>\n\n"
+            f"<i>Unable to reach Spotify servers. This might be due to:\n"
+            f"• Network connectivity issues\n"
+            f"• Spotify API temporary outage\n"
+            f"• Rate limiting\n\n"
+            f"Please try again in a few moments.</i>"
         )
-        logger.error(f"Track handler error: {e}", exc_info=True)
+        
+        await status_msg.edit_text(user_friendly_msg)
+        logger.error(f"Track handler error for {track_id}: {e}", exc_info=True)
 
 
 @bot.on_callback_query(filters.regex(r"^spotify_dl:"))
@@ -951,7 +1105,10 @@ async def spotify_album_handler(_, message: Message):
         return
     
     try:
-        album = await asyncio.to_thread(spotify_client.album, album_id)
+        album = await asyncio.wait_for(
+            asyncio.to_thread(spotify_client.album, album_id),
+            timeout=SPOTIFY_REQUEST_TIMEOUT + 5
+        )
         
         info_text = (
             f"{Emoji.ALBUM} <b>{album['name']}</b>\n\n"
@@ -969,9 +1126,17 @@ async def spotify_album_handler(_, message: Message):
         
         logger.info(f"Album info: {album['name']}")
     
+    except asyncio.TimeoutError:
+        await message.reply_text(
+            f"{Emoji.ERROR} <b>Request Timeout</b>\n\n"
+            f"<i>Unable to fetch album information. Please try again.</i>",
+            quote=True
+        )
+        logger.error(f"Album handler timeout for {album_id}")
     except Exception as e:
         await message.reply_text(
-            f"{Emoji.ERROR} Error: {str(e)}",
+            f"{Emoji.ERROR} <b>Error</b>\n\n"
+            f"<i>Unable to fetch album information. Please try again later.</i>",
             quote=True
         )
         logger.error(f"Album handler error: {e}", exc_info=True)
@@ -993,7 +1158,10 @@ async def spotify_playlist_handler(_, message: Message):
         return
     
     try:
-        playlist = await asyncio.to_thread(spotify_client.playlist, playlist_id)
+        playlist = await asyncio.wait_for(
+            asyncio.to_thread(spotify_client.playlist, playlist_id),
+            timeout=SPOTIFY_REQUEST_TIMEOUT + 5
+        )
         
         info_text = (
             f"📋 <b>{playlist['name']}</b>\n\n"
@@ -1010,9 +1178,17 @@ async def spotify_playlist_handler(_, message: Message):
         
         logger.info(f"Playlist info: {playlist['name']}")
     
+    except asyncio.TimeoutError:
+        await message.reply_text(
+            f"{Emoji.ERROR} <b>Request Timeout</b>\n\n"
+            f"<i>Unable to fetch playlist information. Please try again.</i>",
+            quote=True
+        )
+        logger.error(f"Playlist handler timeout for {playlist_id}")
     except Exception as e:
         await message.reply_text(
-            f"{Emoji.ERROR} Error: {str(e)}",
+            f"{Emoji.ERROR} <b>Error</b>\n\n"
+            f"<i>Unable to fetch playlist information. Please try again later.</i>",
             quote=True
         )
         logger.error(f"Playlist handler error: {e}", exc_info=True)
@@ -1043,5 +1219,36 @@ async def cleanup_expired_track_cache():
             logger.error(f"Cache cleanup error: {e}")
 
 
-# Start background cache cleanup
+async def monitor_spotify_client_health():
+    """Monitor Spotify client health and recreate if needed"""
+    
+    global spotify_client
+    
+    while True:
+        try:
+            await asyncio.sleep(1800)  # Check every 30 minutes
+            
+            if not spotify_client:
+                logger.warning(f"{Emoji.WARNING} Spotify client not available, attempting recreation...")
+                spotify_client = create_robust_spotify_client()
+            else:
+                # Simple health check
+                try:
+                    test_track_id = "3n3Ppam7vgaVa1iaRUc9Lp"  # A known valid track
+                    await asyncio.wait_for(
+                        asyncio.to_thread(spotify_client.track, test_track_id),
+                        timeout=10
+                    )
+                    logger.debug("Spotify client health check: OK")
+                except Exception as e:
+                    logger.warning(f"{Emoji.WARNING} Spotify client health check failed: {e}")
+                    logger.info("Recreating Spotify client...")
+                    spotify_client = create_robust_spotify_client()
+        
+        except Exception as e:
+            logger.error(f"Health monitor error: {e}")
+
+
+# Start background tasks
 asyncio.create_task(cleanup_expired_track_cache())
+asyncio.create_task(monitor_spotify_client_health())
