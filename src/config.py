@@ -65,6 +65,7 @@ def parse_json_env(key, default=None):
 
 # Load configuration
 RAPID_API_KEYS = parse_json_env("RAPID_API_KEYS")
+STORAGE_CHANNEL_ID: int = int(getenv("STORAGE_CHANNEL_ID", ""))
 
 API_ID = int(getenv("API_ID", 0))
 API_HASH = getenv("API_HASH", "")
