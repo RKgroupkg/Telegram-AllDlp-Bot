@@ -32,6 +32,7 @@ from src.helpers.filters import is_download_rate_limited
 from src.helpers.dlp.api_dlp.deezerDL import DeezerDownloader
 from src.helpers.dlp.api_dlp.tidalDL import TidalDownloader
 
+from src.database.storage_helper import backup_audio
 logger = LOGGER(__name__)
 
 # ==================== CONSTANTS ====================
@@ -924,6 +925,215 @@ async def download_and_upload_audio(
                     await selection_msg.delete()
                 except Exception as e:
                     logger.debug(f"Could not delete selection message: {e}")
+async def download_and_upload_audio(
+    message: Message,
+    metadata: TrackMetadata,
+    source: str,
+    status_msg: Message,
+    selection_msg: Message = None
+) -> bool:
+    """
+    Main download and upload orchestrator with storage backup
+    
+    Args:
+        message: Original message
+        metadata: Track metadata
+        source: Download source
+        status_msg: Status message to update
+        selection_msg: Source selection message to delete after completion
+        
+    Returns:
+        True if successful
+    """
+    output_dir = CATCH_PATH
+    os.makedirs(output_dir, exist_ok=True)
+    
+    file_path = None
+    thumb_path = None
+    source_name = None
+    
+    try:
+        # Auto mode: Try all sources in priority order
+        if source == DownloadSource.AUTO.value:
+            logger.info(f"[Auto] {Emoji.SPARKLES} Trying all sources")
+            
+            # Try Tidal (best quality)
+            if metadata.isrc:
+                await status_msg.edit_text(
+                    f"{Emoji.LOADING} <b>{metadata.title}</b>\n"
+                    f"<i>→ Trying Tidal (Best Quality)...</i>"
+                )
+                file_path = await try_tidal_download(metadata, output_dir)
+                if file_path:
+                    source_name = "Tidal HiFi FLAC"
+            
+            # Try Deezer if Tidal failed
+            if not file_path and metadata.isrc:
+                await status_msg.edit_text(
+                    f"{Emoji.LOADING} <b>{metadata.title}</b>\n"
+                    f"<i>→ Trying Deezer...</i>"
+                )
+                file_path = await try_deezer_download(metadata, output_dir)
+                if file_path:
+                    source_name = "Deezer FLAC"
+            
+            # Fallback to YouTube
+            if not file_path:
+                await status_msg.edit_text(
+                    f"{Emoji.LOADING} <b>{metadata.title}</b>\n"
+                    f"<i>→ Trying YouTube...</i>"
+                )
+                source = DownloadSource.YOUTUBE.value
+        
+        elif source == DownloadSource.TIDAL.value:
+            await status_msg.edit_text(
+                f"{Emoji.LOADING} <b>{metadata.title}</b>\n"
+                f"<i>→ Downloading from Tidal HiFi...</i>"
+            )
+            file_path = await try_tidal_download(metadata, output_dir)
+            if file_path:
+                source_name = "Tidal HiFi FLAC"
+        
+        elif source == DownloadSource.DEEZER.value:
+            await status_msg.edit_text(
+                f"{Emoji.LOADING} <b>{metadata.title}</b>\n"
+                f"<i>→ Downloading from Deezer...</i>"
+            )
+            file_path = await try_deezer_download(metadata, output_dir)
+            if file_path:
+                source_name = "Deezer FLAC"
+        
+        # Handle YouTube or auto-mode fallback
+        if source == DownloadSource.YOUTUBE.value or (
+            source == DownloadSource.AUTO.value and not file_path
+        ):
+            await status_msg.edit_text(
+                f"{Emoji.SEARCH} <b>{metadata.title}</b>\n"
+                f"<i>→ Searching YouTube...</i>"
+            )
+            
+            clean_expired_cache()
+            youtube_info = await find_youtube_match(metadata)
+            
+            if not youtube_info:
+                await status_msg.edit_text(
+                    f"{Emoji.ERROR} <b>{metadata.title}</b>\n"
+                    f"<i>No YouTube matches found</i>"
+                )
+                return False
+            
+            # Add to cache and show format selection
+            add_video_info_to_cache(youtube_info.id, youtube_info)
+            
+            formats = youtube_info.all_formats
+            if not formats:
+                await status_msg.edit_text(
+                    f"{Emoji.ERROR} <b>{metadata.title}</b>\n"
+                    f"<i>No downloadable formats available</i>"
+                )
+                return False
+            
+            format_markup = create_format_selection_markup(formats)
+            info_text = format_track_info_message(metadata, include_source_hint=False)
+            info_text += f"\n▶️ <b>Source:</b> <i>YouTube</i>\n\n"
+            info_text += f"<i>{Emoji.INFO} Select format to download:</i>"
+            
+            if metadata.album_art:
+                await status_msg.delete()
+                await message.reply_photo(
+                    photo=metadata.album_art,
+                    caption=info_text,
+                    reply_markup=format_markup,
+                    quote=True
+                )
+            else:
+                await status_msg.edit_text(info_text, reply_markup=format_markup)
+            
+            logger.info(f"[YouTube] Format selection presented")
+            return True
+        
+        # Upload FLAC file if downloaded from Tidal/Deezer
+        if file_path and source_name:
+            file_size = os.path.getsize(file_path)
+            file_size_str = format_file_size(file_size)
+            
+            await status_msg.edit_text(
+                f"{Emoji.DOWNLOAD} <b>{metadata.title}</b>\n\n"
+                f"{Emoji.ARTIST} <i>{metadata.artist}</i>\n"
+                f"{Emoji.QUALITY} <i>{source_name}</i>\n"
+                f"{Emoji.FILE} <i>{file_size_str}</i>\n\n"
+                f"<i>→ Uploading to Telegram...</i>"
+            )
+            
+            # Download thumbnail for audio
+            if metadata.album_art:
+                thumb_filename = f"{sanitize_filename(metadata.title)}_thumb.jpg"
+                thumb_path = os.path.join(output_dir, thumb_filename)
+                thumb_path = await download_thumbnail(metadata.album_art, thumb_path)
+            
+            # Upload with metadata
+            caption = (
+                f"<b>{metadata.title}</b>\n"
+                f"{Emoji.ARTIST} <i>{metadata.artist}</i>\n"
+                f"{Emoji.ALBUM} <i>{metadata.album}</i>\n"
+                f"{Emoji.CLOCK} <i>{metadata.duration_formatted}</i>\n"
+                f"{Emoji.QUALITY} <i>{source_name}</i>"
+            )
+            
+            # Send to user
+            sent_message = await message.reply_audio(
+                audio=file_path,
+                caption=caption,
+                title=metadata.title,
+                performer=metadata.artist,
+                duration=int(metadata.duration_ms / 1000),
+                thumb=thumb_path,
+                quote=True
+            )
+            
+            # ============================================================
+            # STORAGE INTEGRATION - Backup in background (non-blocking)
+            # ============================================================
+            storage_caption = (
+                f"{metadata.title} - {metadata.artist}\n"
+                f"Album: {metadata.album}\n"
+                f"Source: {source_name}\n"
+                f"Spotify: {metadata.spotify_url}"
+            )
+            
+            # Fire-and-forget backup (doesn't wait, doesn't block)
+            backup_audio(
+                file_path=file_path,
+                caption=storage_caption,
+                callback=lambda result: logger.info(
+                    f"{'✓ Backup successful' if result else '✗ Backup failed'}: {metadata.title}"
+                ) if result else None
+            )
+            # ============================================================
+            
+            await status_msg.delete()
+            
+            # Delete the source selection message
+            if selection_msg:
+                try:
+                    await selection_msg.delete()
+                except Exception as e:
+                    logger.debug(f"Could not delete selection message: {e}")
+            
+            logger.info(f"{Emoji.CHECK} Upload complete: {metadata.title}")
+            return True
+        else:
+            await status_msg.edit_text(
+                f"{Emoji.ERROR} <b>{metadata.title}</b>\n"
+                f"<i>Download failed from {source.title()}</i>"
+            )
+            
+            # Delete the source selection message after failure too
+            if selection_msg:
+                try:
+                    await selection_msg.delete()
+                except Exception as e:
+                    logger.debug(f"Could not delete selection message: {e}")
             
             logger.error(f"Download failed for {metadata.title} from {source}")
             return False
@@ -945,10 +1155,59 @@ async def download_and_upload_audio(
         return False
     
     finally:
-        # Always cleanup temporary files
-        cleanup_files(file_path, thumb_path)
+        # Cleanup happens AFTER backup is queued (but backup runs in background)
+        # We delay cleanup slightly to ensure backup task has started
+        async def delayed_cleanup():
+            await asyncio.sleep(2)  # Give backup task time to start
+            cleanup_files(file_path, thumb_path)
+        
+        asyncio.create_task(delayed_cleanup())
 
 
+# ==================== ALTERNATIVE: Backup with file_id for reuse ====================
+"""
+If you want to store the file_id for later reuse (send from storage instead of re-uploading),
+use this approach instead:
+
+async def download_and_upload_audio_with_storage_reuse(
+    message: Message,
+    metadata: TrackMetadata,
+    source: str,
+    status_msg: Message,
+    selection_msg: Message = None
+) -> bool:
+    # ... (same as above until the upload part) ...
+    
+    if file_path and source_name:
+        # Upload to user first
+        sent_message = await message.reply_audio(
+            audio=file_path,
+            caption=caption,
+            title=metadata.title,
+            performer=metadata.artist,
+            duration=int(metadata.duration_ms / 1000),
+            thumb=thumb_path,
+            quote=True
+        )
+        
+        # Get file_id from storage (waits for upload)
+        storage_caption = f"{metadata.title} - {metadata.artist}"
+        file_id = await backup_and_get_file_id(
+            file_path=file_path,
+            caption=storage_caption,
+            file_type="audio"
+        )
+        
+        if file_id:
+            # Store file_id in database for future use
+            # await db.store_track_file_id(metadata.track_id, file_id)
+            logger.info(f"Stored file_id for reuse: {metadata.title}")
+        
+        # Now you can send from storage using file_id:
+        # await message.reply_audio(file_id)  # Much faster!
+        
+        # ... rest of the function ...
+"""
 # ==================== MESSAGE HANDLERS ====================
 
 @bot.on_message(
