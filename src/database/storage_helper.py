@@ -238,10 +238,10 @@ class BackgroundStorageHelper:
 _storage_instance: Optional[BackgroundStorageHelper] = None
 
 
-def _get_storage() -> BackgroundStorageHelper:
+def _get_storage() -> Optional[BackgroundStorageHelper]:
     """
     Get or create storage instance. Auto-configures from src.
-    No manual initialization needed.
+    No manual initialization needed. Returns None if config missing.
     """
     global _storage_instance
 
@@ -251,14 +251,15 @@ def _get_storage() -> BackgroundStorageHelper:
             from src import bot
             from src.config import STORAGE_CHANNEL_ID  # Add this to your config
 
+            if not STORAGE_CHANNEL_ID:
+                logger.info("STORAGE_CHANNEL_ID not configured - storage disabled")
+                return None
+
             _storage_instance = BackgroundStorageHelper(bot, STORAGE_CHANNEL_ID)
             logger.info(f"Auto-initialized storage for channel: {STORAGE_CHANNEL_ID}")
-        except ImportError as e:
-            logger.error(f"Failed to auto-initialize storage: {e}")
-            raise RuntimeError(
-                "Storage helper requires 'bot' and 'STORAGE_CHANNEL_ID' "
-                "to be available in src module"
-            ) from e
+        except (ImportError, AttributeError) as e:
+            logger.warning(f"Storage not available: {e}")
+            return None
 
     return _storage_instance
 
@@ -287,6 +288,10 @@ def backup_file(
     """
     try:
         storage = _get_storage()
+        if storage is None:
+            logger.debug(f"Storage not configured - skipping backup of {file_path}")
+            return
+        
         storage.upload_in_background(file_path, caption, file_type, callback)
         logger.debug(f"Queued background upload: {file_path}")
     except Exception as e:
@@ -317,6 +322,10 @@ async def backup_and_get_file_id(
     """
     try:
         storage = _get_storage()
+        if storage is None:
+            logger.debug(f"Storage not configured - cannot get file_id for {file_path}")
+            return None
+        
         return await storage.upload_and_get_file_id(file_path, caption, file_type)
     except Exception as e:
         logger.error(f"Failed to upload and get file_id: {e}")
