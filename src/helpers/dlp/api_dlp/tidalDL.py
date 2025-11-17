@@ -50,41 +50,35 @@ class TidalDownloader:
         self.client_secret = base64.b64decode(
             "eGV1UG1ZN25icFo5SUliTEFjUTkzc2hrYTFWTmhlVUFxTjZJY3N6alRHOD0="
         ).decode()
-        self.api_url = api_url or "https://hifi.401658.xyz"
-        logger.debug(f"TidalDownloader initialized with API: {self.api_url}")
+        self.api_url = api_url
+        if self.api_url:
+            logger.debug(f"TidalDownloader initialized with API: {self.api_url}")
+        else:
+            logger.debug("TidalDownloader initialized without API (will need to be set)")
     
     @staticmethod
     def get_available_apis():
         """
-        Fetch list of available API instances from status endpoint.
+        Fetch list of available API instances from GitHub.
         
         Returns:
-            list: Available API instances sorted by response time
+            list: Available API instances with URLs
         """
         try:
-            logger.debug("Fetching available API instances...")
+            logger.debug("Fetching available API instances from GitHub...")
             response = requests.get(
-                "https://status.monochrome.tf/api/stream", 
-                timeout=10, 
-                stream=True
+                "https://raw.githubusercontent.com/afkarxyz/SpotiFLAC/refs/heads/main/tidal.json",
+                timeout=10
             )
             
-            for line in response.iter_lines():
-                if line:
-                    line_str = line.decode('utf-8')
-                    if line_str.startswith('data: '):
-                        data = json.loads(line_str[6:])
-                        
-                        api_instances = [
-                            inst for inst in data.get('instances', [])
-                            if inst.get('instance_type') == 'api' 
-                            and inst.get('last_check', {}).get('success')
-                        ]
-                        
-                        api_instances.sort(key=lambda x: x.get('avg_response_time', 9999))
-                        
-                        logger.info(f"Found {len(api_instances)} available API instances")
-                        return api_instances
+            if response.status_code == 200:
+                api_list = response.json()
+                api_instances = [{"url": f"https://{api}"} for api in api_list]
+                logger.info(f"Found {len(api_instances)} available API instances")
+                return api_instances
+            else:
+                logger.error(f"Failed to fetch API list: HTTP {response.status_code}")
+                return []
                         
         except Exception as e:
             logger.error(f"Failed to fetch API list: {e}")
@@ -97,51 +91,46 @@ class TidalDownloader:
         
         Returns:
             str: Selected API URL
+            
+        Raises:
+            Exception: If no APIs available or selection cancelled
         """
         apis = TidalDownloader.get_available_apis()
         
         if not apis:
-            logger.warning("No APIs available, using default: https://hifi.401658.xyz")
-            return "https://hifi.401658.xyz"
+            logger.error("No APIs available")
+            raise Exception("No APIs available. Cannot proceed.")
         
         logger.info("\n=== Available API Instances ===")
-        logger.info(f"{'No':<4} {'URL':<40} {'Status':<8} {'Uptime':<8} {'Avg Response':<12}")
-        logger.info("-" * 80)
+        logger.info(f"{'No':<4} {'URL':<50}")
+        logger.info("-" * 60)
         
         for i, api in enumerate(apis, 1):
             url = api.get('url', 'N/A')
-            status = "UP" if api.get('last_check', {}).get('success') else "DOWN"
-            uptime = f"{api.get('uptime', 0):.1f}%"
-            avg_time = f"{api.get('avg_response_time', 0)}ms"
-            
-            logger.info(f"{i:<4} {url:<40} {status:<8} {uptime:<8} {avg_time:<12}")
+            logger.info(f"{i:<4} {url:<50}")
         
-        logger.info("\n0    Use default (https://hifi.401658.xyz)")
-        logger.info("-" * 80)
+        logger.info("-" * 60)
         
         while True:
             try:
-                choice = input(f"\nSelect API (0-{len(apis)}) [1 for fastest]: ").strip()
+                choice = input(f"\nSelect API (1-{len(apis)}) [1]: ").strip()
                 
                 if not choice:
                     choice = "1"
                 
                 choice_num = int(choice)
                 
-                if choice_num == 0:
-                    logger.info("Using default API")
-                    return "https://hifi.401658.xyz"
-                elif 1 <= choice_num <= len(apis):
+                if 1 <= choice_num <= len(apis):
                     selected_url = apis[choice_num - 1]['url']
                     logger.info(f"Selected API: {selected_url}")
                     return selected_url
                 else:
-                    logger.warning(f"Invalid choice. Please enter 0-{len(apis)}")
+                    logger.warning(f"Invalid choice. Please enter 1-{len(apis)}")
             except ValueError:
                 logger.warning("Invalid input. Please enter a number.")
             except KeyboardInterrupt:
-                logger.info("\nUsing default API")
-                return "https://hifi.401658.xyz"
+                logger.info("\nAPI selection cancelled")
+                raise Exception("API selection cancelled")
 
     def set_progress_callback(self, callback):
         """
@@ -346,6 +335,9 @@ class TidalDownloader:
         Raises:
             Exception: If URL cannot be obtained
         """
+        if not self.api_url:
+            raise Exception("API URL not set. Please initialize with an API URL.")
+            
         logger.info(f"Fetching download URL for track {track_id}...")
         download_api_url = f"{self.api_url}/track/?id={track_id}&quality={quality}"
         
@@ -625,11 +617,8 @@ class TidalDownloader:
         if auto_fallback:
             apis = self.get_available_apis()
             if not apis:
-                logger.warning("No APIs available for fallback, using current API")
-                return self._download_single(
-                    query, isrc, output_dir, quality, 
-                    is_paused_callback, is_stopped_callback
-                )
+                logger.error("No APIs available for fallback")
+                raise Exception("No APIs available for fallback")
             
             last_error = None
             for i, api in enumerate(apis, 1):
@@ -743,7 +732,7 @@ def main():
     downloader = TidalDownloader(timeout=30, max_retries=3, api_url=selected_api)
     
     query = "APT."
-    isrc = "USUM71027402"
+    isrc = "USAT22409172"
     output_dir = "."
     
     try:
