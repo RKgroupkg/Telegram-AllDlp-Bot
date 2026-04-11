@@ -27,48 +27,23 @@ os.makedirs(DEFAULT_COOKIES_DIR, exist_ok=True)
 
 
 # Utils
-def beautify_views(views):
-    """
-    Format view counts in a human-readable way.
 
-    Handles various input types including strings, integers, and floats.
-    Supports inputs with non-digit characters and handles edge cases.
-
-    Args:
-        views: The view count (string, integer, float, or None)
-
-    Returns:
-        Formatted view count as a string (e.g., "1.2k", "3.4m", "42")
-
-    Examples:
-        >>> beautify_views(1234)
-        '1.2k'
-        >>> beautify_views('56,789')
-        '56.8k'
-        >>> beautify_views(1234567)
-        '1.2m'
-        >>> beautify_views(None)
-        '0'
-        >>> beautify_views('abc')
-        '0'
-    """
-    # Handle None or empty inputs
+def beautify_views(views: Union[int, str, float, None]) -> str:
     if views is None:
         return "0"
+        
+    # If it's already a string with a magnitude indicator, leave it alone
+    if isinstance(views, str) and any(char in views.lower() for char in ['k', 'm', 'b']):
+        return views.strip()
 
-    # Convert input to string and extract only digits
     try:
-        # Remove any non-digit characters except potential decimal point
-        views_str = "".join(
-            char for char in str(views) if char.isdigit() or char == "."
-        )
-
-        # Convert to float, handling potential conversion errors
-        views_num = float(views_str) if views_str else 0
+        # Strip commas or spaces from raw string numbers (e.g., "1,234,567")
+        if isinstance(views, str):
+            views = views.replace(',', '').replace(' ', '')
+        views_num = float(views)
     except (ValueError, TypeError):
         return "0"
 
-    # Format based on magnitude
     if views_num < 1000:
         return str(int(views_num))
     elif views_num < 1_000_000:
