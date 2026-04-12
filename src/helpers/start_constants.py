@@ -34,52 +34,85 @@ To download Spotify tracks or songs.
  
 
 """
-USER_TEXT = """
-━━━〔 Utils Cmd Doc 〕━━━
+DEV_TEXT = """
+━━━〔 Developer Commands 〕━━━
 
-• /start: To Get this message
+- /update
+  ↳ Update the bot to the latest commit from the repository.
 
-• /help: Alias command for start
+- /shell | /sh
+  ↳ Execute terminal commands directly via the bot.
 
-• /alive: Check if bot is alive or not.
+- /exec | /py
+  ↳ Execute Python code via the bot with a built-in refresh button.
 
-• /ping: Alias command for alive.
-
-• /paste: paste text to katb.in website.
+- /broadcast
+  ↳ Broadcast a message to all bot users and groups.
 """
 
 SUDO_TEXT = """
-━━━〔 Sudo Cmd Doc 〕━━━
-• /speedtest: Check the internet speed of bot server.
+━━━〔 Sudo Commands 〕━━━
 
-• /serverstats: Get the stats of server.
+- /stats | /serverstats
+  ↳ Get server resource stats (CPU, RAM, disk, etc).
 
-• /dbstats: Get the stats of database 
+- /dbstats
+  ↳ Get MongoDB database statistics including collections and usage.
 
-• /stats: Alias command for serverstats
+- /log | /logs
+  ↳ Open the log management control panel.
 
-• /log: To get the log file of the bot.
+- /inspect
+  ↳ Inspect a message and return full details in JSON format.
 
-• /clean_ytcache: Clears the catch.
+- /catch
+  ↳ Open the catch file manager to browse and manage temporary files.
 
-• /catch: clear the catch and useless file (Its automatic also)
+- /cookie | /cookies <pastebinUrl>
+  ↳ Import new cookies via a Base64-encoded Pastebin URL.
 
-• /ytstats: shows Yt stats
-
-• /cookie <basteBinUrl>: To add new cookie and load it (Note use base64 encoding while uploding)
+- /speedtest | /speed
+  ↳ Run a speedtest on the server where the bot is hosted.
 """
 
-DEV_TEXT = """
-━━━〔 Dev Cmd Doc 〕━━━
-• /update: Update the bot to latest commit from repository. 
+USER_TEXT = """
+━━━〔 User Commands 〕━━━
 
-• /restart: Restart the bot.
+- /start | /help
+  ↳ Start the bot or get the help menu.
 
-• /shell: Run the terminal commands via bot.
+- /ping | /alive
+  ↳ Check Telegram API ping speed and bot uptime.
 
-• /py: Run the python commands via bot
+- /dl <url>
+  ↳ Download media from a supported URL (auto-detects platform).
 
-• /broadcast: Broadcast the message to bot users and chats.
+- /youtube | /yt | /ytdl <url>
+  ↳ Download a YouTube video or audio by URL.
+
+- /music | /search | /play <query>
+  ↳ Search YouTube for music tracks and pick one to download.
+
+- /ytstats
+  ↳ Show YouTube downloader usage statistics.
+
+- /clean_ytcache
+  ↳ Clear the YouTube downloader cache manually.
+
+- /spotify | /spt | /sptdlp | /dlmusic <url>
+  ↳ Download a Spotify track by intercepting the Spotify link.
+
+- /instagram | /insta | /igdl <url>
+  ↳ Download Instagram reels, posts, or stories by URL.
+
+- /ighelp
+  ↳ Get detailed help about the Instagram downloader feature.
+
+- /paste
+  ↳ Paste text or images with interactive formatting options.
+
+- /id
+  ↳ Get detailed info about a user, message, chat, or forwarded content.
 """
 
 ABOUT_CAPTION = f"""• Python version : {__python_version__}

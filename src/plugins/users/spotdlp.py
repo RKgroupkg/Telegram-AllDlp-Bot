@@ -4,952 +4,514 @@
 import os
 import re
 import asyncio
-from typing import Any, Dict, Optional, Tuple, List
+from typing import Dict, Optional, Tuple, List
 from datetime import datetime, timedelta
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from functools import wraps
 import time
 
-import spotipy
 from pyrogram import filters
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
-from spotipy.oauth2 import SpotifyClientCredentials
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+from SpotiFLAC import SpotiFLAC
 
 from src import bot
-from src.config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, CATCH_PATH
+from src.config import CATCH_PATH
 from src.logging import LOGGER
 from src.helpers.dlp._rex import (SPOTIFY_ALBUM_REGEX, SPOTIFY_PLAYLIST_REGEX,
-                                  SPOTIFY_TRACK_REGEX)
+                                   SPOTIFY_TRACK_REGEX)
 from src.helpers.dlp.yt_dl.catch import (add_video_info_to_cache,
-                                         clean_expired_cache)
+                                          clean_expired_cache)
 from src.helpers.dlp.yt_dl.dataclass import SearchInfo
 from src.helpers.dlp.yt_dl.utils import create_format_selection_markup
 from src.helpers.dlp.yt_dl.ytdl_core import fetch_youtube_info, search_youtube
 from src.helpers.filters import is_download_rate_limited
-from src.helpers.dlp.api_dlp.deezerDL import DeezerDownloader
-from src.helpers.dlp.api_dlp.tidalDL import TidalDownloader
 
 logger = LOGGER(__name__)
 
-# ==================== CONSTANTS ====================
+# ══════════════════════════════════════════════════════════════════════════════
+# CONSTANTS
+# ══════════════════════════════════════════════════════════════════════════════
 
 class DownloadSource(Enum):
-    """Enumeration of available download sources"""
-    AUTO = "auto"
-    TIDAL = "tidal"
-    DEEZER = "deezer"
+    AUTO    = "auto"
+    TIDAL   = "tidal"
+    DEEZER  = "deezer"
     YOUTUBE = "youtube"
 
 
 class AudioFormat(Enum):
-    """Audio file formats"""
     FLAC = ".flac"
-    MP3 = ".mp3"
-    M4A = ".m4a"
+    MP3  = ".mp3"
+    M4A  = ".m4a"
 
 
-# UI Constants
 class Emoji:
-    """Consistent emoji set for UI"""
-    MUSIC = "♪"
+    MUSIC    = "♪"
     SPARKLES = "✦"
     DOWNLOAD = "↓"
-    CHECK = "✓"
-    ERROR = "✗"
-    WARNING = "⚠"
-    INFO = "ⓘ"
-    LOADING = "⌛"
-    SEARCH = "⌕"
-    ALBUM = "◉"
-    ARTIST = "♬"
-    CLOCK = "⏲"
-    STAR = "★"
-    QUALITY = "◆"
-    FILE = "▤"
-    CANCEL = "⊗"
+    CHECK    = "✓"
+    ERROR    = "✗"
+    WARNING  = "⚠"
+    INFO     = "ⓘ"
+    LOADING  = "⌛"
+    SEARCH   = "⌕"
+    ALBUM    = "◉"
+    ARTIST   = "♬"
+    CLOCK    = "⏲"
+    STAR     = "★"
+    QUALITY  = "◆"
+    FILE     = "▤"
+    CANCEL   = "⊗"
 
 
-# Network and retry configuration
-SPOTIFY_REQUEST_TIMEOUT = 15  # seconds
-SPOTIFY_MAX_RETRIES = 3
-SPOTIFY_RETRY_BACKOFF_FACTOR = 1.5  # exponential backoff
-SPOTIFY_RETRY_STATUS_CODES = [429, 500, 502, 503, 504]
+CACHE_EXPIRY_MINUTES = 30
+MAX_FILENAME_LENGTH  = 200
+AUDIO_EXTENSIONS     = (AudioFormat.FLAC.value, AudioFormat.MP3.value, AudioFormat.M4A.value)
 
-# Download timeouts and retries
-DOWNLOAD_TIMEOUT = 30
-MAX_RETRIES = 2
-CACHE_EXPIRY_MINUTES = 10
-THUMBNAIL_SIZE = (320, 320)
-MAX_FILENAME_LENGTH = 200
+# SpotiFLAC service priority lists per user-chosen source
+_SERVICE_MAP: Dict[str, List[str]] = {
+    DownloadSource.TIDAL.value:   ["tidal"],
+    DownloadSource.DEEZER.value:  ["deezer"],
+    DownloadSource.AUTO.value:    ["tidal", "deezer", "qobuz", "spoti", "amazon", "youtube"],
+    DownloadSource.YOUTUBE.value: ["youtube"],
+}
 
-# File extensions
-AUDIO_EXTENSIONS = (AudioFormat.FLAC.value, AudioFormat.MP3.value, AudioFormat.M4A.value)
-
-# ==================== DATA CLASSES ====================
+# ══════════════════════════════════════════════════════════════════════════════
+# DATA CLASSES
+# ══════════════════════════════════════════════════════════════════════════════
 
 @dataclass
-class TrackMetadata:
-    """Structured track metadata"""
-    title: str
-    artist: str
-    album: str
-    release_date: str
-    duration_ms: int
-    duration_formatted: str
-    spotify_url: str
-    album_art: Optional[str]
-    popularity: int
-    isrc: Optional[str]
-    cached_at: datetime
-    track_id: str
-    
+class TrackSession:
+    """
+    Lightweight session object stored in cache.
+    Only holds what we need to drive the download — no Spotify API calls.
+    """
+    spotify_url:  str
+    track_id:     str
+    cached_at:    datetime = field(default_factory=datetime.now)
+
+    # Optional display fields populated from SpotiFLAC metadata if available
+    title:        str = "Unknown Title"
+    artist:       str = "Unknown Artist"
+    album:        str = "Unknown Album"
+    duration:     str = "0:00"
+    album_art:    Optional[str] = None
+    has_isrc:     bool = True           # assume True; SpotiFLAC will sort it out
+
     @property
-    def has_high_quality_sources(self) -> bool:
-        """Check if track has ISRC for high-quality downloads"""
-        return bool(self.isrc)
-    
-    @property
-    def quality_indicator(self) -> str:
-        """Get quality indicator string"""
-        return f"{Emoji.QUALITY} High-Quality Sources Available" if self.has_high_quality_sources else f"{Emoji.INFO} YouTube Only"
+    def display_title(self) -> str:
+        return f"{self.title} — {self.artist}"
 
 
-# ==================== RETRY DECORATOR ====================
-
-def retry_on_network_error(max_attempts=3, backoff_factor=1.5, exceptions=(Exception,)):
-    """
-    Decorator for retrying functions on network errors with exponential backoff
-    
-    Args:
-        max_attempts: Maximum number of retry attempts
-        backoff_factor: Multiplier for delay between retries
-        exceptions: Tuple of exceptions to catch
-    """
-    def decorator(func):
-        @wraps(func)
-        async def async_wrapper(*args, **kwargs):
-            last_exception = None
-            
-            for attempt in range(1, max_attempts + 1):
-                try:
-                    return await func(*args, **kwargs)
-                except exceptions as e:
-                    last_exception = e
-                    
-                    if attempt == max_attempts:
-                        logger.error(
-                            f"{Emoji.ERROR} [{func.__name__}] Failed after {max_attempts} attempts: {e}"
-                        )
-                        raise
-                    
-                    delay = backoff_factor ** (attempt - 1)
-                    logger.warning(
-                        f"{Emoji.WARNING} [{func.__name__}] Attempt {attempt}/{max_attempts} failed: {e}. "
-                        f"Retrying in {delay:.1f}s..."
-                    )
-                    await asyncio.sleep(delay)
-            
-            raise last_exception
-        
-        @wraps(func)
-        def sync_wrapper(*args, **kwargs):
-            last_exception = None
-            
-            for attempt in range(1, max_attempts + 1):
-                try:
-                    return func(*args, **kwargs)
-                except exceptions as e:
-                    last_exception = e
-                    
-                    if attempt == max_attempts:
-                        logger.error(
-                            f"{Emoji.ERROR} [{func.__name__}] Failed after {max_attempts} attempts: {e}"
-                        )
-                        raise
-                    
-                    delay = backoff_factor ** (attempt - 1)
-                    logger.warning(
-                        f"{Emoji.WARNING} [{func.__name__}] Attempt {attempt}/{max_attempts} failed: {e}. "
-                        f"Retrying in {delay:.1f}s..."
-                    )
-                    time.sleep(delay)
-            
-            raise last_exception
-        
-        return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
-    
-    return decorator
-
-
-# ==================== SPOTIFY CLIENT INITIALIZATION ====================
-
-def create_robust_spotify_client():
-    """
-    Create Spotify client with robust connection handling
-    
-    Returns:
-        Configured spotipy.Spotify client or None
-    """
-    if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
-        logger.warning("⚠ Spotify credentials not configured")
-        return None
-    
-    try:
-        # Configure retry strategy
-        retry_strategy = Retry(
-            total=SPOTIFY_MAX_RETRIES,
-            backoff_factor=SPOTIFY_RETRY_BACKOFF_FACTOR,
-            status_forcelist=SPOTIFY_RETRY_STATUS_CODES,
-            allowed_methods=["GET", "POST"],
-            raise_on_status=False
-        )
-        
-        # Create HTTP adapter with retry strategy
-        adapter = HTTPAdapter(
-            max_retries=retry_strategy,
-            pool_connections=10,
-            pool_maxsize=20,
-            pool_block=False
-        )
-        
-        # Configure auth manager
-        auth_manager = SpotifyClientCredentials(
-            client_id=SPOTIFY_CLIENT_ID,
-            client_secret=SPOTIFY_CLIENT_SECRET
-        )
-        
-        # Create Spotify client
-        client = spotipy.Spotify(
-            auth_manager=auth_manager,
-            requests_timeout=SPOTIFY_REQUEST_TIMEOUT,
-            retries=SPOTIFY_MAX_RETRIES,
-            status_forcelist=SPOTIFY_RETRY_STATUS_CODES,
-            backoff_factor=SPOTIFY_RETRY_BACKOFF_FACTOR
-        )
-        
-        # Mount adapter for both HTTP and HTTPS
-        client._session.mount("http://", adapter)
-        client._session.mount("https://", adapter)
-        
-        # Configure session headers
-        client._session.headers.update({
-            'Connection': 'keep-alive',
-            'Accept-Encoding': 'gzip, deflate',
-            'User-Agent': 'QuickDL-Bot/1.0'
-        })
-        
-        logger.info("✓ Spotify client initialized with robust connection handling")
-        return client
-        
-    except Exception as e:
-        logger.error(f"✗ Failed to initialize Spotify client: {e}")
-        return None
-
-
-# Initialize Spotify client
-spotify_client = create_robust_spotify_client()
-
-# Track cache with expiration
-track_cache: Dict[str, TrackMetadata] = {}
-
-
-# ==================== UTILITY FUNCTIONS ====================
+# ══════════════════════════════════════════════════════════════════════════════
+# UTILITIES
+# ══════════════════════════════════════════════════════════════════════════════
 
 def extract_spotify_id(text: str, pattern: str) -> Optional[str]:
-    """Extract Spotify ID from URL using regex pattern"""
     match = re.search(pattern, text)
     return match.group(1) if match else None
 
 
-def format_duration(ms: int) -> str:
-    """Format milliseconds to MM:SS"""
-    total_seconds = int(ms / 1000)
-    minutes, seconds = divmod(total_seconds, 60)
-    return f"{minutes}:{seconds:02d}"
+def format_file_size(size_bytes: int) -> str:
+    for unit in ("B", "KB", "MB", "GB"):
+        if size_bytes < 1024.0:
+            return f"{size_bytes:.2f} {unit}"
+        size_bytes /= 1024.0
+    return f"{size_bytes:.2f} TB"
 
 
-def format_file_size(bytes: int) -> str:
-    """Format bytes to human-readable size"""
-    for unit in ['B', 'KB', 'MB', 'GB']:
-        if bytes < 1024.0:
-            return f"{bytes:.2f} {unit}"
-        bytes /= 1024.0
-    return f"{bytes:.2f} TB"
-
-
-def sanitize_filename(filename: str, max_length: int = MAX_FILENAME_LENGTH) -> str:
-    """
-    Sanitize filename for cross-platform compatibility
-    
-    Args:
-        filename: Original filename
-        max_length: Maximum allowed length
-        
-    Returns:
-        Safe filename string
-    """
-    if not filename:
+def sanitize_filename(name: str, max_length: int = MAX_FILENAME_LENGTH) -> str:
+    if not name:
         return "Unknown"
-    
-    # Remove invalid characters
-    sanitized = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '', str(filename))
-    # Normalize whitespace
-    sanitized = re.sub(r'\s+', ' ', sanitized).strip('. ')
-    # Truncate if needed
-    if len(sanitized) > max_length:
-        sanitized = sanitized[:max_length].rstrip('. ')
-    
-    return sanitized or "Unknown"
+    clean = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", str(name))
+    clean = re.sub(r"\s+", " ", clean).strip(". ")
+    if len(clean) > max_length:
+        clean = clean[:max_length].rstrip(". ")
+    return clean or "Unknown"
 
 
 def normalize_text(text: str) -> str:
-    """Normalize text for fuzzy matching"""
-    normalized = re.sub(r'[^\w\s]', '', text.lower())
-    return re.sub(r'\s+', ' ', normalized).strip()
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", "", text.lower())).strip()
 
 
-def calculate_match_score(filename: str, title: str, artist: str) -> float:
-    """
-    Calculate fuzzy match score for file detection
-    
-    Returns:
-        Match score (0-100)
-    """
-    norm_filename = normalize_text(filename)
-    norm_title = normalize_text(title)
-    norm_artist = normalize_text(artist)
-    
-    score = 0.0
-    
-    # Exact substring matches
-    if norm_title in norm_filename:
-        score += 50.0
-    if norm_artist in norm_filename:
-        score += 50.0
-    
-    # Word overlap scoring
-    title_words = set(norm_title.split())
-    artist_words = set(norm_artist.split())
-    file_words = set(norm_filename.split())
-    
-    if title_words:
-        title_overlap = len(title_words & file_words) / len(title_words)
-        score += title_overlap * 30.0
-    
-    if artist_words:
-        artist_overlap = len(artist_words & file_words) / len(artist_words)
-        score += artist_overlap * 20.0
-    
-    return score
-
-
-def find_downloaded_file(
-    output_dir: str, 
-    title: str, 
-    artist: str,
-    extensions: Tuple[str, ...] = AUDIO_EXTENSIONS
-) -> Optional[str]:
-    """
-    Intelligently locate downloaded file with fuzzy matching
-    
-    Args:
-        output_dir: Directory to search
-        title: Expected track title
-        artist: Expected artist name
-        extensions: Valid file extensions
-        
-    Returns:
-        Full path to file or None
-    """
-    if not os.path.exists(output_dir):
-        logger.warning(f"Directory does not exist: {output_dir}")
+def find_newest_audio_file(directory: str) -> Optional[str]:
+    """Return the most recently modified audio file in *directory*, or None."""
+    if not os.path.isdir(directory):
         return None
-    
-    audio_files = [
-        f for f in os.listdir(output_dir) 
-        if f.lower().endswith(extensions)
+    candidates = [
+        f for f in os.listdir(directory)
+        if f.lower().endswith(AUDIO_EXTENSIONS)
     ]
-    
-    if not audio_files:
-        logger.warning(f"No audio files found in {output_dir}")
+    if not candidates:
         return None
-    
-    logger.debug(f"Searching for: '{title}' by '{artist}' among {len(audio_files)} files")
-    
-    # Strategy 1: Exact sanitized match
-    safe_patterns = [
-        f"{sanitize_filename(artist)} - {sanitize_filename(title)}",
-        f"{sanitize_filename(title)} - {sanitize_filename(artist)}",
-        f"{sanitize_filename(artist)}_{sanitize_filename(title)}",
+    newest = max(candidates, key=lambda f: os.path.getmtime(os.path.join(directory, f)))
+    return os.path.join(directory, newest)
+
+
+def find_new_audio_files(before: set, directory: str) -> List[str]:
+    """Return newly created audio files compared to *before* snapshot."""
+    if not os.path.isdir(directory):
+        return []
+    after = set(os.listdir(directory))
+    new   = after - before
+    return [
+        os.path.join(directory, f)
+        for f in new
+        if f.lower().endswith(AUDIO_EXTENSIONS)
     ]
-    
-    for pattern in safe_patterns:
-        for ext in extensions:
-            filename = f"{pattern}{ext}"
-            if filename in audio_files:
-                path = os.path.join(output_dir, filename)
-                logger.info(f"{Emoji.CHECK} Found exact match: {filename}")
-                return path
-    
-    # Strategy 2: Fuzzy matching with score threshold
-    best_match = None
-    best_score = 0.0
-    
-    for filename in audio_files:
-        score = calculate_match_score(
-            os.path.splitext(filename)[0], 
-            title, 
-            artist
-        )
-        
-        logger.debug(f"  '{filename}' → score: {score:.1f}")
-        
-        if score > best_score:
-            best_score = score
-            best_match = filename
-    
-    # Accept if score meets threshold
-    if best_match and best_score >= 60.0:
-        path = os.path.join(output_dir, best_match)
-        logger.info(f"{Emoji.CHECK} Found fuzzy match: {best_match} (score: {best_score:.1f})")
-        return path
-    
-    # Strategy 3: Most recent file fallback
-    if audio_files:
-        most_recent = max(
-            audio_files, 
-            key=lambda f: os.path.getmtime(os.path.join(output_dir, f))
-        )
-        path = os.path.join(output_dir, most_recent)
-        logger.warning(f"{Emoji.WARNING} Using most recent file: {most_recent}")
-        return path
-    
-    logger.error(f"{Emoji.ERROR} No suitable file found")
-    return None
 
 
-@retry_on_network_error(
-    max_attempts=3,
-    backoff_factor=1.5,
-    exceptions=(Exception,)
-)
-async def download_thumbnail(url: str, output_path: str) -> Optional[str]:
-    """
-    Download and save thumbnail image with retry logic
-    
-    Args:
-        url: Image URL
-        output_path: Destination path
-        
-    Returns:
-        File path if successful
-    """
+def cleanup_files(*paths: str) -> None:
+    for p in paths:
+        if p and os.path.exists(p):
+            try:
+                os.remove(p)
+            except Exception as e:
+                logger.warning(f"Cleanup failed for {p}: {e}")
+
+
+async def download_thumbnail(url: str, dest: str) -> Optional[str]:
     if not url:
         return None
-    
     try:
         import requests
-        response = await asyncio.to_thread(
-            requests.get, url, timeout=10
-        )
-        
-        if response.status_code == 200:
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            with open(output_path, 'wb') as f:
-                f.write(response.content)
-            logger.debug(f"Thumbnail saved: {output_path}")
-            return output_path
-        
-        logger.warning(f"Failed to download thumbnail: HTTP {response.status_code}")
+        resp = await asyncio.to_thread(requests.get, url, timeout=10)
+        if resp.status_code == 200:
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with open(dest, "wb") as fh:
+                fh.write(resp.content)
+            return dest
         return None
-        
     except Exception as e:
-        logger.warning(f"Thumbnail download error: {e}")
-        raise  # Let retry decorator handle it
-
-
-def cleanup_files(*file_paths: str) -> None:
-    """Safely remove multiple files"""
-    for file_path in file_paths:
-        if file_path and os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-                logger.debug(f"Cleaned up: {file_path}")
-            except Exception as e:
-                logger.warning(f"Cleanup failed for {file_path}: {e}")
-
-
-# ==================== SPOTIFY API ====================
-
-@retry_on_network_error(
-    max_attempts=SPOTIFY_MAX_RETRIES,
-    backoff_factor=SPOTIFY_RETRY_BACKOFF_FACTOR,
-    exceptions=(
-        Exception,  # Catch all network-related exceptions
-    )
-)
-async def get_spotify_track_info(track_id: str) -> Optional[TrackMetadata]:
-    """
-    Fetch comprehensive track information from Spotify with robust error handling
-    
-    Args:
-        track_id: Spotify track ID
-        
-    Returns:
-        TrackMetadata object or None
-    """
-    if not spotify_client:
-        logger.error("Spotify client not initialized")
+        logger.warning(f"Thumbnail download failed: {e}")
         return None
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SPOTIFLAC WRAPPER
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _blocking_spotiflac(url: str, output_dir: str, services: List[str]) -> Optional[str]:
+    """
+    Synchronous SpotiFLAC call — must always be run via asyncio.to_thread().
+
+    Takes a directory snapshot before and after, then returns the path of
+    the largest new audio file created (or None if nothing was downloaded).
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    before = set(os.listdir(output_dir))
 
     try:
-        # Use asyncio.wait_for to add additional timeout protection
-        track = await asyncio.wait_for(
-            asyncio.to_thread(spotify_client.track, track_id),
-            timeout=SPOTIFY_REQUEST_TIMEOUT + 5  # Add buffer to thread timeout
+        SpotiFLAC(
+            url=url,
+            output_dir=output_dir,
+            services=services,
+            filename_format="{artist} - {title}",
         )
-        
-        metadata = TrackMetadata(
-            title=track["name"],
-            artist=", ".join([artist["name"] for artist in track["artists"]]),
-            album=track["album"]["name"],
-            release_date=track["album"].get("release_date", "Unknown"),
-            duration_ms=track["duration_ms"],
-            duration_formatted=format_duration(track["duration_ms"]),
-            spotify_url=track["external_urls"]["spotify"],
-            album_art=track["album"]["images"][0]["url"] if track["album"]["images"] else None,
-            popularity=track.get("popularity", 0),
-            isrc=track.get("external_ids", {}).get("isrc"),
-            cached_at=datetime.now(),
-            track_id=track_id
-        )
-        
-        logger.info(f"{Emoji.MUSIC} Fetched: {metadata.title} - {metadata.artist}")
-        return metadata
-        
-    except asyncio.TimeoutError:
-        logger.error(f"Spotify API timeout for track {track_id}")
-        raise Exception("Spotify API request timed out")
     except Exception as e:
-        logger.error(f"Error fetching Spotify track {track_id}: {e}")
-        raise  # Let retry decorator handle it
+        logger.error(f"[SpotiFLAC] Exception during download: {e}", exc_info=True)
+        return None
+
+    new_files = find_new_audio_files(before, output_dir)
+    if not new_files:
+        logger.warning("[SpotiFLAC] No new audio files detected after download")
+        return None
+
+    # Prefer the largest file (most likely the lossless one when multiple appear)
+    new_files.sort(key=os.path.getsize, reverse=True)
+    return new_files[0]
 
 
-# ==================== UI MARKUP CREATION ====================
-
-def create_source_selection_markup(track_id: str, has_isrc: bool) -> InlineKeyboardMarkup:
+async def spotiflac_download(
+    url: str,
+    output_dir: str,
+    source: str,
+) -> Tuple[Optional[str], Optional[str]]:
     """
-    Create inline keyboard for source selection
-    
-    Args:
-        track_id: Spotify track ID
-        has_isrc: Whether high-quality sources are available
-        
-    Returns:
-        InlineKeyboardMarkup with download options
+    Async wrapper around SpotiFLAC.
+
+    Returns (file_path, source_label) or (None, None) on failure.
+    source_label is a human-readable string for the Telegram caption.
     """
-    buttons = []
-    
-    if has_isrc:
-        buttons.append([
+    services = _SERVICE_MAP.get(source, _SERVICE_MAP[DownloadSource.AUTO.value])
+
+    logger.info(f"[SpotiFLAC] source={source} | services={services} | url={url}")
+
+    file_path = await asyncio.to_thread(_blocking_spotiflac, url, output_dir, services)
+
+    if not file_path or not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+        logger.warning(f"[SpotiFLAC] Download yielded no usable file for source={source}")
+        return None, None
+
+    # Derive a friendly label from the actual file extension
+    ext = os.path.splitext(file_path)[1].lower()
+    label_map = {
+        DownloadSource.TIDAL.value:   "Tidal HiFi FLAC",
+        DownloadSource.DEEZER.value:  "Deezer FLAC",
+        DownloadSource.YOUTUBE.value: "YouTube Audio",
+        DownloadSource.AUTO.value:    "HiFi FLAC" if ext == AudioFormat.FLAC.value else "Audio",
+    }
+    source_label = label_map.get(source, "Audio")
+
+    size = format_file_size(os.path.getsize(file_path))
+    logger.info(f"[SpotiFLAC] {Emoji.CHECK} {source_label} | {size} | {file_path}")
+    return file_path, source_label
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SESSION CACHE
+# ══════════════════════════════════════════════════════════════════════════════
+
+# track_id → TrackSession
+_session_cache: Dict[str, TrackSession] = {}
+
+
+def cache_session(session: TrackSession) -> None:
+    _session_cache[session.track_id] = session
+
+
+def get_session(track_id: str) -> Optional[TrackSession]:
+    return _session_cache.get(track_id)
+
+
+def evict_session(track_id: str) -> None:
+    _session_cache.pop(track_id, None)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# UI HELPERS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def build_source_markup(track_id: str) -> InlineKeyboardMarkup:
+    """Inline keyboard shown after the user sends a Spotify track link."""
+    return InlineKeyboardMarkup([
+        [
             InlineKeyboardButton(
-                f"{Emoji.SPARKLES} Auto (Best Quality)", 
+                f"{Emoji.SPARKLES} Auto (Best Quality)",
                 callback_data=f"spotify_dl:auto:{track_id}"
             )
-        ])
-        buttons.append([
+        ],
+        [
             InlineKeyboardButton(
-                f"{Emoji.QUALITY} Tidal FLAC", 
+                f"{Emoji.QUALITY} Tidal FLAC",
                 callback_data=f"spotify_dl:tidal:{track_id}"
             ),
             InlineKeyboardButton(
-                f"{Emoji.MUSIC} Deezer FLAC", 
+                f"{Emoji.MUSIC} Deezer FLAC",
                 callback_data=f"spotify_dl:deezer:{track_id}"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "▶️ YouTube",
+                callback_data=f"spotify_dl:youtube:{track_id}"
             )
-        ])
-    
-    buttons.append([
-        InlineKeyboardButton(
-            f"▶️ YouTube", 
-            callback_data=f"spotify_dl:youtube:{track_id}"
-        )
+        ],
     ])
-    
-    return InlineKeyboardMarkup(buttons)
 
 
-def format_track_info_message(metadata: TrackMetadata, include_source_hint: bool = True) -> str:
-    """
-    Format track information for display
-    
-    Args:
-        metadata: Track metadata
-        include_source_hint: Whether to include source selection hint
-        
-    Returns:
-        Formatted message text
-    """
-    message = (
-        f"<b>{metadata.title}</b>\n\n"
-        f"{Emoji.ARTIST} <b>Artist:</b> <i>{metadata.artist}</i>\n"
-        f"{Emoji.ALBUM} <b>Album:</b> <i>{metadata.album}</i>\n"
-        f"📅 <b>Released:</b> <i>{metadata.release_date}</i>\n"
-        f"{Emoji.CLOCK} <b>Duration:</b> <i>{metadata.duration_formatted}</i>\n"
-        f"{Emoji.STAR} <b>Popularity:</b> <i>{metadata.popularity}/100</i>\n"
-    )
-    
-    if include_source_hint:
-        message += f"\n<b>{metadata.quality_indicator}</b>\n"
-        message += f"<i>{Emoji.INFO} Choose your download source:</i>"
-    
-    return message
+def build_track_caption(session: TrackSession, source_label: Optional[str] = None) -> str:
+    lines = [f"<b>{session.title}</b>\n"]
+    if session.artist != "Unknown Artist":
+        lines.append(f"{Emoji.ARTIST} <i>{session.artist}</i>")
+    if session.album != "Unknown Album":
+        lines.append(f"{Emoji.ALBUM} <i>{session.album}</i>")
+    if session.duration != "0:00":
+        lines.append(f"{Emoji.CLOCK} <i>{session.duration}</i>")
+    if source_label:
+        lines.append(f"{Emoji.QUALITY} <i>{source_label}</i>")
+    return "\n".join(lines)
 
 
-# ==================== DOWNLOAD HANDLERS ====================
-
-async def try_tidal_download(metadata: TrackMetadata, output_dir: str) -> Optional[str]:
-    """
-    Attempt download from Tidal
-    
-    Returns:
-        File path if successful
-    """
-    if not metadata.isrc:
-        logger.warning("No ISRC available for Tidal")
-        return None
-    
-    try:
-        logger.info(f"[Tidal] Attempting ISRC: {metadata.isrc}")
-        
-        downloader = TidalDownloader(timeout=DOWNLOAD_TIMEOUT, max_retries=MAX_RETRIES)
-        
-        query = f"{sanitize_filename(metadata.title)} {sanitize_filename(metadata.artist)}"
-        
-        file_path = await asyncio.to_thread(
-            downloader.download,
-            query=query,
-            isrc=metadata.isrc,
-            output_dir=output_dir,
-            quality="LOSSLESS",
-            auto_fallback=True
-        )
-        
-        if file_path and os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-            size = format_file_size(os.path.getsize(file_path))
-            logger.info(f"[Tidal] {Emoji.CHECK} Success: {size}")
-            return file_path
-        
-        logger.warning("[Tidal] Download failed or file empty")
-        return None
-        
-    except Exception as e:
-        logger.error(f"[Tidal] {Emoji.ERROR} Error: {e}", exc_info=True)
-        return None
+def build_info_message(session: TrackSession) -> str:
+    lines = [
+        f"<b>{session.title}</b>\n",
+        f"{Emoji.ARTIST} <b>Artist:</b> <i>{session.artist}</i>",
+        f"{Emoji.ALBUM} <b>Album:</b> <i>{session.album}</i>",
+        f"{Emoji.CLOCK} <b>Duration:</b> <i>{session.duration}</i>",
+        f"\n{Emoji.QUALITY} <b>High-Quality Sources Available</b>",
+        f"<i>{Emoji.INFO} Choose your download source:</i>",
+    ]
+    return "\n".join(lines)
 
 
-async def try_deezer_download(metadata: TrackMetadata, output_dir: str) -> Optional[str]:
-    """
-    Attempt download from Deezer
-    
-    Returns:
-        File path if successful
-    """
-    if not metadata.isrc:
-        logger.warning("No ISRC available for Deezer")
-        return None
-    
-    try:
-        logger.info(f"[Deezer] Attempting ISRC: {metadata.isrc}")
-        
-        # Capture files before download
-        files_before = set(os.listdir(output_dir)) if os.path.exists(output_dir) else set()
-        
-        downloader = DeezerDownloader()
-        success = await downloader.download_by_isrc(
-            isrc=metadata.isrc,
-            output_dir=output_dir
-        )
-        
-        if not success:
-            logger.warning("[Deezer] Download returned False")
-            return None
-        
-        # Check for new files
-        files_after = set(os.listdir(output_dir)) if os.path.exists(output_dir) else set()
-        new_files = files_after - files_before
-        
-        # Prefer newly created files
-        if new_files:
-            for new_file in new_files:
-                if new_file.lower().endswith(AUDIO_EXTENSIONS):
-                    file_path = os.path.join(output_dir, new_file)
-                    if os.path.getsize(file_path) > 0:
-                        size = format_file_size(os.path.getsize(file_path))
-                        logger.info(f"[Deezer] {Emoji.CHECK} Success: {size}")
-                        return file_path
-        
-        # Fallback to intelligent file finder
-        file_path = find_downloaded_file(
-            output_dir, 
-            metadata.title, 
-            metadata.artist
-        )
-        
-        if file_path and os.path.getsize(file_path) > 0:
-            size = format_file_size(os.path.getsize(file_path))
-            logger.info(f"[Deezer] {Emoji.CHECK} Found: {size}")
-            return file_path
-        
-        logger.warning("[Deezer] No valid file found")
-        return None
-        
-    except Exception as e:
-        logger.error(f"[Deezer] {Emoji.ERROR} Error: {e}", exc_info=True)
-        return None
+# ══════════════════════════════════════════════════════════════════════════════
+# YOUTUBE FALLBACK
+# ══════════════════════════════════════════════════════════════════════════════
 
-
-async def find_youtube_match(metadata: TrackMetadata) -> Optional[SearchInfo]:
-    """Find matching YouTube video"""
-    search_query = f"{metadata.title} {metadata.artist} official audio"
-    
-    logger.info(f"[YouTube] {Emoji.SEARCH} Searching: {search_query}")
-    
-    try:
-        results = await search_youtube(search_query, max_results=5)
-        
-        if not results:
-            logger.warning("[YouTube] No results found")
-            return None
-        
-        video_info = await fetch_youtube_info(results[0].id)
-        
-        if video_info:
-            logger.info(f"[YouTube] {Emoji.CHECK} Found: {video_info.title}")
-        
-        return video_info
-        
-    except Exception as e:
-        logger.error(f"[YouTube] Search error: {e}")
-        return None
-
-
-async def download_and_upload_audio(
+async def _youtube_format_selection(
     message: Message,
-    metadata: TrackMetadata,
-    source: str,
+    session: TrackSession,
     status_msg: Message,
-    selection_msg: Message = None
 ) -> bool:
     """
-    Main download and upload orchestrator
-    
-    Args:
-        message: Original message
-        metadata: Track metadata
-        source: Download source
-        status_msg: Status message to update
-        selection_msg: Source selection message to delete after completion
-        
-    Returns:
-        True if successful
+    Search YouTube and present format-selection markup.
+    Returns True if the selection was presented successfully.
+    """
+    await status_msg.edit_text(
+        f"{Emoji.SEARCH} <b>{session.title}</b>\n<i>→ Searching YouTube…</i>"
+    )
+
+    clean_expired_cache()
+    query       = f"{session.title} {session.artist} official audio"
+    results     = await search_youtube(query, max_results=5)
+
+    if not results:
+        await status_msg.edit_text(
+            f"{Emoji.ERROR} <b>{session.title}</b>\n<i>No YouTube matches found.</i>"
+        )
+        return False
+
+    youtube_info = await fetch_youtube_info(results[0].id)
+    if not youtube_info or not youtube_info.all_formats:
+        await status_msg.edit_text(
+            f"{Emoji.ERROR} <b>{session.title}</b>\n<i>No downloadable formats available.</i>"
+        )
+        return False
+
+    add_video_info_to_cache(youtube_info.id, youtube_info)
+    markup = create_format_selection_markup(youtube_info.all_formats)
+
+    caption  = build_info_message(session).replace(
+        f"{Emoji.QUALITY} <b>High-Quality Sources Available</b>\n", ""
+    )
+    caption += f"\n▶️ <b>Source:</b> <i>YouTube</i>\n\n"
+    caption += f"<i>{Emoji.INFO} Select format to download:</i>"
+
+    if session.album_art:
+        await status_msg.delete()
+        await message.reply_photo(
+            photo=session.album_art, caption=caption,
+            reply_markup=markup, quote=True
+        )
+    else:
+        await status_msg.edit_text(caption, reply_markup=markup)
+
+    return True
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MAIN DOWNLOAD + UPLOAD ORCHESTRATOR
+# ══════════════════════════════════════════════════════════════════════════════
+
+async def download_and_upload(
+    message: Message,
+    session: TrackSession,
+    source: str,
+    status_msg: Message,
+    selection_msg: Optional[Message] = None,
+) -> bool:
+    """
+    Download the track via SpotiFLAC (or YouTube) and upload it to Telegram.
+
+    Returns True when the audio has been sent (or format-selection presented
+    for YouTube), False on unrecoverable failure.
     """
     output_dir = CATCH_PATH
     os.makedirs(output_dir, exist_ok=True)
-    
-    file_path = None
-    thumb_path = None
+
+    file_path   = None
+    thumb_path  = None
     source_name = None
-    
-    try:
-        # Auto mode: Try all sources in priority order
-        if source == DownloadSource.AUTO.value:
-            logger.info(f"[Auto] {Emoji.SPARKLES} Trying all sources")
-            
-            # Try Tidal (best quality)
-            if metadata.isrc:
-                await status_msg.edit_text(
-                    f"{Emoji.LOADING} <b>{metadata.title}</b>\n"
-                    f"<i>→ Trying Tidal (Best Quality)...</i>"
-                )
-                file_path = await try_tidal_download(metadata, output_dir)
-                if file_path:
-                    source_name = "Tidal HiFi FLAC"
-            
-            # Try Deezer if Tidal failed
-            if not file_path and metadata.isrc:
-                await status_msg.edit_text(
-                    f"{Emoji.LOADING} <b>{metadata.title}</b>\n"
-                    f"<i>→ Trying Deezer...</i>"
-                )
-                file_path = await try_deezer_download(metadata, output_dir)
-                if file_path:
-                    source_name = "Deezer FLAC"
-            
-            # Fallback to YouTube
-            if not file_path:
-                await status_msg.edit_text(
-                    f"{Emoji.LOADING} <b>{metadata.title}</b>\n"
-                    f"<i>→ Trying YouTube...</i>"
-                )
-                source = DownloadSource.YOUTUBE.value
-        
-        elif source == DownloadSource.TIDAL.value:
-            await status_msg.edit_text(
-                f"{Emoji.LOADING} <b>{metadata.title}</b>\n"
-                f"<i>→ Downloading from Tidal HiFi...</i>"
-            )
-            file_path = await try_tidal_download(metadata, output_dir)
-            if file_path:
-                source_name = "Tidal HiFi FLAC"
-        
-        elif source == DownloadSource.DEEZER.value:
-            await status_msg.edit_text(
-                f"{Emoji.LOADING} <b>{metadata.title}</b>\n"
-                f"<i>→ Downloading from Deezer...</i>"
-            )
-            file_path = await try_deezer_download(metadata, output_dir)
-            if file_path:
-                source_name = "Deezer FLAC"
-        
-        # Handle YouTube or auto-mode fallback
-        if source == DownloadSource.YOUTUBE.value or (
-            source == DownloadSource.AUTO.value and not file_path
-        ):
-            await status_msg.edit_text(
-                f"{Emoji.SEARCH} <b>{metadata.title}</b>\n"
-                f"<i>→ Searching YouTube...</i>"
-            )
-            
-            clean_expired_cache()
-            youtube_info = await find_youtube_match(metadata)
-            
-            if not youtube_info:
-                await status_msg.edit_text(
-                    f"{Emoji.ERROR} <b>{metadata.title}</b>\n"
-                    f"<i>No YouTube matches found</i>"
-                )
-                return False
-            
-            # Add to cache and show format selection
-            add_video_info_to_cache(youtube_info.id, youtube_info)
-            
-            formats = youtube_info.all_formats
-            if not formats:
-                await status_msg.edit_text(
-                    f"{Emoji.ERROR} <b>{metadata.title}</b>\n"
-                    f"<i>No downloadable formats available</i>"
-                )
-                return False
-            
-            format_markup = create_format_selection_markup(formats)
-            info_text = format_track_info_message(metadata, include_source_hint=False)
-            info_text += f"\n▶️ <b>Source:</b> <i>YouTube</i>\n\n"
-            info_text += f"<i>{Emoji.INFO} Select format to download:</i>"
-            
-            if metadata.album_art:
-                await status_msg.delete()
-                await message.reply_photo(
-                    photo=metadata.album_art,
-                    caption=info_text,
-                    reply_markup=format_markup,
-                    quote=True
-                )
-            else:
-                await status_msg.edit_text(info_text, reply_markup=format_markup)
-            
-            logger.info(f"[YouTube] Format selection presented")
-            return True
-        
-        # Upload FLAC file if downloaded from Tidal/Deezer
-        if file_path and source_name:
-            file_size = os.path.getsize(file_path)
-            file_size_str = format_file_size(file_size)
-            
-            await status_msg.edit_text(
-                f"{Emoji.DOWNLOAD} <b>{metadata.title}</b>\n\n"
-                f"{Emoji.ARTIST} <i>{metadata.artist}</i>\n"
-                f"{Emoji.QUALITY} <i>{source_name}</i>\n"
-                f"{Emoji.FILE} <i>{file_size_str}</i>\n\n"
-                f"<i>→ Uploading to Telegram...</i>"
-            )
-            
-            # Download thumbnail for audio
-            if metadata.album_art:
-                thumb_filename = f"{sanitize_filename(metadata.title)}_thumb.jpg"
-                thumb_path = os.path.join(output_dir, thumb_filename)
-                thumb_path = await download_thumbnail(metadata.album_art, thumb_path)
-            
-            # Upload with metadata
-            caption = (
-                f"<b>{metadata.title}</b>\n"
-                f"{Emoji.ARTIST} <i>{metadata.artist}</i>\n"
-                f"{Emoji.ALBUM} <i>{metadata.album}</i>\n"
-                f"{Emoji.CLOCK} <i>{metadata.duration_formatted}</i>\n"
-                f"{Emoji.QUALITY} <i>{source_name}</i>"
-            )
-            
-            await message.reply_audio(
-                audio=file_path,
-                caption=caption,
-                title=metadata.title,
-                performer=metadata.artist,
-                duration=int(metadata.duration_ms / 1000),
-                thumb=thumb_path,
-                quote=True
-            )
-            
-            await status_msg.delete()
-            
-            # Delete the source selection message
-            if selection_msg:
-                try:
-                    await selection_msg.delete()
-                except Exception as e:
-                    logger.debug(f"Could not delete selection message: {e}")
-            
-            logger.info(f"{Emoji.CHECK} Upload complete: {metadata.title}")
-            return True
-        else:
-            await status_msg.edit_text(
-                f"{Emoji.ERROR} <b>{metadata.title}</b>\n"
-                f"<i>Download failed from {source.title()}</i>"
-            )
-            
-            # Delete the source selection message after failure too
-            if selection_msg:
-                try:
-                    await selection_msg.delete()
-                except Exception as e:
-                    logger.debug(f"Could not delete selection message: {e}")
-            
-            logger.error(f"Download failed for {metadata.title} from {source}")
-            return False
-    
-    except Exception as e:
-        logger.error(f"Error in download_and_upload: {e}", exc_info=True)
-        await status_msg.edit_text(
-            f"{Emoji.ERROR} <b>Error occurred</b>\n"
-            f"<i>{str(e)[:200]}</i>"
-        )
-        
-        # Delete selection message even on error
+
+    async def _delete_selection():
         if selection_msg:
             try:
                 await selection_msg.delete()
             except Exception:
                 pass
-        
+
+    try:
+        # ── HiFi path (auto / tidal / deezer) ────────────────────────────────
+        if source in (DownloadSource.AUTO.value,
+                      DownloadSource.TIDAL.value,
+                      DownloadSource.DEEZER.value):
+
+            hint = {
+                DownloadSource.AUTO.value:   "→ Trying best quality (Tidal › Deezer › Qobuz › …)…",
+                DownloadSource.TIDAL.value:  "→ Downloading from Tidal HiFi…",
+                DownloadSource.DEEZER.value: "→ Downloading from Deezer…",
+            }[source]
+
+            await status_msg.edit_text(
+                f"{Emoji.LOADING} <b>{session.title}</b>\n<i>{hint}</i>"
+            )
+
+            file_path, source_name = await spotiflac_download(
+                session.spotify_url, output_dir, source
+            )
+
+            # AUTO mode: cascade to YouTube if all HiFi services failed
+            if not file_path and source == DownloadSource.AUTO.value:
+                logger.info("[Auto] All HiFi sources failed — falling back to YouTube")
+                result = await _youtube_format_selection(message, session, status_msg)
+                await _delete_selection()
+                return result
+
+        # ── Explicit YouTube ──────────────────────────────────────────────────
+        elif source == DownloadSource.YOUTUBE.value:
+            result = await _youtube_format_selection(message, session, status_msg)
+            await _delete_selection()
+            return result
+
+        # ── Upload HiFi file ──────────────────────────────────────────────────
+        if file_path and source_name:
+            size_str = format_file_size(os.path.getsize(file_path))
+
+            await status_msg.edit_text(
+                f"{Emoji.DOWNLOAD} <b>{session.title}</b>\n\n"
+                f"{Emoji.ARTIST} <i>{session.artist}</i>\n"
+                f"{Emoji.QUALITY} <i>{source_name}</i>\n"
+                f"{Emoji.FILE} <i>{size_str}</i>\n\n"
+                f"<i>→ Uploading to Telegram…</i>"
+            )
+
+            # Thumbnail
+            if session.album_art:
+                thumb_path = os.path.join(
+                    output_dir,
+                    f"{sanitize_filename(session.title)}_thumb.jpg"
+                )
+                thumb_path = await download_thumbnail(session.album_art, thumb_path)
+
+            await message.reply_audio(
+                audio=file_path,
+                caption=build_track_caption(session, source_name),
+                title=session.title,
+                performer=session.artist,
+                thumb=thumb_path,
+                quote=True,
+            )
+
+            await status_msg.delete()
+            await _delete_selection()
+            logger.info(f"{Emoji.CHECK} Upload complete: {session.title}")
+            return True
+
+        # ── Nothing worked ────────────────────────────────────────────────────
+        await status_msg.edit_text(
+            f"{Emoji.ERROR} <b>{session.title}</b>\n"
+            f"<i>Download failed from {source.title()}. Try a different source.</i>"
+        )
+        await _delete_selection()
         return False
-    
+
+    except Exception as e:
+        logger.error(f"download_and_upload error: {e}", exc_info=True)
+        await status_msg.edit_text(
+            f"{Emoji.ERROR} <b>Unexpected error</b>\n<i>{str(e)[:200]}</i>"
+        )
+        await _delete_selection()
+        return False
+
     finally:
-        # Always cleanup temporary files
         cleanup_files(file_path, thumb_path)
 
 
-# ==================== MESSAGE HANDLERS ====================
+# ══════════════════════════════════════════════════════════════════════════════
+# MESSAGE HANDLERS
+# ══════════════════════════════════════════════════════════════════════════════
 
 @bot.on_message(
     filters.regex(SPOTIFY_TRACK_REGEX)
@@ -957,298 +519,132 @@ async def download_and_upload_audio(
     & is_download_rate_limited
 )
 async def spotify_track_handler(_, message: Message):
-    """Handle Spotify track links and present source selection"""
-    
-    if not spotify_client:
-        await message.reply_text(
-            f"{Emoji.WARNING} <b>Spotify Not Configured</b>\n\n"
-            f"<i>Please contact administrator to enable Spotify integration.</i>",
-            quote=True
-        )
-        return
-    
+    """
+    Intercepts Spotify track links.
+
+    We no longer call the Spotify Web API at all — we only need the track ID
+    to build the session and the URL to pass to SpotiFLAC later.
+    The source-selection UI is shown immediately with no network round-trip.
+    """
     track_id = extract_spotify_id(message.text, SPOTIFY_TRACK_REGEX)
     if not track_id:
-        logger.warning("Invalid Spotify track URL")
+        logger.warning("Could not extract track ID from message")
         return
-    
-    status_msg = await message.reply_text(
-        f"{Emoji.LOADING} <b>Processing Spotify Track</b>\n\n"
-        f"<i>→ Fetching track information...</i>", 
-        quote=True
+
+    # Reconstruct a canonical Spotify URL (handles shortened/regional URLs)
+    spotify_url = f"https://open.spotify.com/track/{track_id}"
+
+    # Build a minimal session — no API call needed
+    session = TrackSession(spotify_url=spotify_url, track_id=track_id)
+    cache_session(session)
+
+    markup   = build_source_markup(track_id)
+    msg_text = (
+        f"{Emoji.MUSIC} <b>Spotify Track</b>\n\n"
+        f"<code>{track_id}</code>\n\n"
+        f"{Emoji.QUALITY} <b>High-Quality Sources Available</b>\n"
+        f"<i>{Emoji.INFO} Choose your download source:</i>"
     )
-    
-    try:
-        # Fetch track metadata with retry logic
-        metadata = await get_spotify_track_info(track_id)
-        if not metadata:
-            await status_msg.edit_text(
-                f"{Emoji.ERROR} <b>Failed to fetch track information</b>\n\n"
-                f"<i>The Spotify service may be temporarily unavailable. Please try again later.</i>"
-            )
-            return
-        
-        # Cache metadata
-        track_cache[track_id] = metadata
-        logger.debug(f"Cached track: {track_id}")
-        
-        # Create source selection UI
-        source_markup = create_source_selection_markup(
-            track_id, 
-            metadata.has_high_quality_sources
-        )
-        
-        info_text = format_track_info_message(metadata, include_source_hint=True)
-        
-        # Display with album art if available
-        if metadata.album_art:
-            await status_msg.delete()
-            await message.reply_photo(
-                photo=metadata.album_art,
-                caption=info_text,
-                reply_markup=source_markup,
-                quote=True
-            )
-        else:
-            await status_msg.edit_text(info_text, reply_markup=source_markup)
-        
-        logger.info(f"{Emoji.CHECK} Source selection presented for: {metadata.title}")
-    
-    except Exception as e:
-        error_msg = str(e)
-        user_friendly_msg = (
-            f"{Emoji.ERROR} <b>Connection Error</b>\n\n"
-            f"<i>Unable to reach Spotify servers. This might be due to:\n"
-            f"• Network connectivity issues\n"
-            f"• Spotify API temporary outage\n"
-            f"• Rate limiting\n\n"
-            f"Please try again in a few moments.</i>"
-        )
-        
-        await status_msg.edit_text(user_friendly_msg)
-        logger.error(f"Track handler error for {track_id}: {e}", exc_info=True)
+
+    await message.reply_text(msg_text, reply_markup=markup, quote=True)
+    logger.info(f"Source selection presented for track: {track_id}")
 
 
 @bot.on_callback_query(filters.regex(r"^spotify_dl:"))
 async def spotify_download_callback(_, callback_query: CallbackQuery):
-    """Handle download source selection callbacks"""
-    
+    """Handle the source-selection button taps."""
     try:
-        # Parse callback data
         _, source, track_id = callback_query.data.split(":", 2)
-        
-        logger.info(f"User selected: {source} for track: {track_id}")
-        
-        # Retrieve cached metadata
-        metadata = track_cache.get(track_id)
-        if not metadata:
-            await callback_query.answer(
-                f"{Emoji.WARNING} Session expired. Please send the link again.",
-                show_alert=True
-            )
-            logger.warning(f"Cache miss for track: {track_id}")
-            return
-        
-        # Acknowledge selection
-        source_labels = {
-            "auto": f"{Emoji.SPARKLES} Auto",
-            "tidal": f"{Emoji.QUALITY} Tidal",
-            "deezer": f"{Emoji.MUSIC} Deezer",
-            "youtube": "▶️ YouTube"
-        }
+    except ValueError:
+        await callback_query.answer("Invalid callback data.", show_alert=True)
+        return
+
+    session = get_session(track_id)
+    if not session:
         await callback_query.answer(
-            f"{source_labels.get(source, '')} Starting download..."
-        )
-        
-        # Create progress message
-        status_msg = await callback_query.message.reply_text(
-            f"{Emoji.LOADING} <b>{metadata.title}</b>\n\n"
-            f"<i>→ Initializing download from {source.upper()}...</i>",
-            quote=True
-        )
-        
-        # Start download process
-        success = await download_and_upload_audio(
-            callback_query.message,
-            metadata,
-            source,
-            status_msg,
-            callback_query.message  # Pass the selection message to delete it
-        )
-        
-        # Cleanup cache after completion
-        if success or source != DownloadSource.YOUTUBE.value:
-            track_cache.pop(track_id, None)
-            logger.info(f"{Emoji.CHECK} Completed: {metadata.title}")
-    
-    except Exception as e:
-        await callback_query.answer(
-            f"{Emoji.ERROR} Error: {str(e)[:180]}",
+            f"{Emoji.WARNING} Session expired. Please send the link again.",
             show_alert=True
         )
-        logger.error(f"Callback error: {e}", exc_info=True)
+        return
 
+    labels = {
+        "auto":    f"{Emoji.SPARKLES} Auto",
+        "tidal":   f"{Emoji.QUALITY} Tidal",
+        "deezer":  f"{Emoji.MUSIC} Deezer",
+        "youtube": "▶️ YouTube",
+    }
+    await callback_query.answer(f"{labels.get(source, source)} — starting download…")
+
+    status_msg = await callback_query.message.reply_text(
+        f"{Emoji.LOADING} <b>{session.title}</b>\n"
+        f"<i>→ Initialising {source.upper()} download…</i>",
+        quote=True
+    )
+
+    success = await download_and_upload(
+        callback_query.message,
+        session,
+        source,
+        status_msg,
+        selection_msg=callback_query.message,
+    )
+
+    # Keep the session alive when YouTube format-selection is open
+    if success and source != DownloadSource.YOUTUBE.value:
+        evict_session(track_id)
+
+    logger.info(f"{'OK' if success else 'FAIL'}: {session.title} via {source}")
+
+
+# ── Album / Playlist handlers (info-only — unchanged logic) ──────────────────
 
 @bot.on_message(filters.regex(SPOTIFY_ALBUM_REGEX) & is_download_rate_limited)
 async def spotify_album_handler(_, message: Message):
-    """Handle Spotify album links (info only)"""
-    
-    if not spotify_client:
-        await message.reply_text(
-            f"{Emoji.WARNING} Spotify integration not configured.",
-            quote=True
-        )
-        return
-    
     album_id = extract_spotify_id(message.text, SPOTIFY_ALBUM_REGEX)
     if not album_id:
         return
-    
-    try:
-        album = await asyncio.wait_for(
-            asyncio.to_thread(spotify_client.album, album_id),
-            timeout=SPOTIFY_REQUEST_TIMEOUT + 5
-        )
-        
-        info_text = (
-            f"{Emoji.ALBUM} <b>{album['name']}</b>\n\n"
-            f"{Emoji.ARTIST} <b>Artist:</b> <i>{album['artists'][0]['name']}</i>\n"
-            f"📅 <b>Released:</b> <i>{album.get('release_date', 'Unknown')}</i>\n"
-            f"{Emoji.MUSIC} <b>Tracks:</b> <i>{album.get('total_tracks', 0)}</i>\n\n"
-            f"{Emoji.INFO} <i>Individual track downloads only.\nPlease send specific track links.</i>"
-        )
-        
-        album_art = album["images"][0]["url"] if album["images"] else None
-        if album_art:
-            await message.reply_photo(photo=album_art, caption=info_text, quote=True)
-        else:
-            await message.reply_text(info_text, quote=True)
-        
-        logger.info(f"Album info: {album['name']}")
-    
-    except asyncio.TimeoutError:
-        await message.reply_text(
-            f"{Emoji.ERROR} <b>Request Timeout</b>\n\n"
-            f"<i>Unable to fetch album information. Please try again.</i>",
-            quote=True
-        )
-        logger.error(f"Album handler timeout for {album_id}")
-    except Exception as e:
-        await message.reply_text(
-            f"{Emoji.ERROR} <b>Error</b>\n\n"
-            f"<i>Unable to fetch album information. Please try again later.</i>",
-            quote=True
-        )
-        logger.error(f"Album handler error: {e}", exc_info=True)
+
+    await message.reply_text(
+        f"{Emoji.ALBUM} <b>Spotify Album</b>\n\n"
+        f"<code>{album_id}</code>\n\n"
+        f"{Emoji.INFO} <i>Individual track downloads only.\n"
+        f"Please send a specific track link.</i>",
+        quote=True
+    )
 
 
 @bot.on_message(filters.regex(SPOTIFY_PLAYLIST_REGEX) & is_download_rate_limited)
 async def spotify_playlist_handler(_, message: Message):
-    """Handle Spotify playlist links (info only)"""
-    
-    if not spotify_client:
-        await message.reply_text(
-            f"{Emoji.WARNING} Spotify integration not configured.",
-            quote=True
-        )
-        return
-    
     playlist_id = extract_spotify_id(message.text, SPOTIFY_PLAYLIST_REGEX)
     if not playlist_id:
         return
-    
-    try:
-        playlist = await asyncio.wait_for(
-            asyncio.to_thread(spotify_client.playlist, playlist_id),
-            timeout=SPOTIFY_REQUEST_TIMEOUT + 5
-        )
-        
-        info_text = (
-            f"📋 <b>{playlist['name']}</b>\n\n"
-            f"👤 <b>By:</b> <i>{playlist['owner']['display_name']}</i>\n"
-            f"{Emoji.MUSIC} <b>Tracks:</b> <i>{playlist['tracks']['total']}</i>\n\n"
-            f"{Emoji.INFO} <i>Individual track downloads only.\nPlease send specific track links.</i>"
-        )
-        
-        playlist_art = playlist["images"][0]["url"] if playlist["images"] else None
-        if playlist_art:
-            await message.reply_photo(photo=playlist_art, caption=info_text, quote=True)
-        else:
-            await message.reply_text(info_text, quote=True)
-        
-        logger.info(f"Playlist info: {playlist['name']}")
-    
-    except asyncio.TimeoutError:
-        await message.reply_text(
-            f"{Emoji.ERROR} <b>Request Timeout</b>\n\n"
-            f"<i>Unable to fetch playlist information. Please try again.</i>",
-            quote=True
-        )
-        logger.error(f"Playlist handler timeout for {playlist_id}")
-    except Exception as e:
-        await message.reply_text(
-            f"{Emoji.ERROR} <b>Error</b>\n\n"
-            f"<i>Unable to fetch playlist information. Please try again later.</i>",
-            quote=True
-        )
-        logger.error(f"Playlist handler error: {e}", exc_info=True)
+
+    await message.reply_text(
+        f"📋 <b>Spotify Playlist</b>\n\n"
+        f"<code>{playlist_id}</code>\n\n"
+        f"{Emoji.INFO} <i>Individual track downloads only.\n"
+        f"Please send a specific track link.</i>",
+        quote=True
+    )
 
 
-# ==================== BACKGROUND TASKS ====================
+# ══════════════════════════════════════════════════════════════════════════════
+# BACKGROUND TASK — SESSION CACHE GC
+# ══════════════════════════════════════════════════════════════════════════════
 
-async def cleanup_expired_track_cache():
-    """Periodically clean expired cache entries"""
-    
+async def _cache_gc():
+    """Evict sessions older than CACHE_EXPIRY_MINUTES every 10 minutes."""
     while True:
         try:
-            await asyncio.sleep(600)  # Run every 10 minutes
-            
-            current_time = datetime.now()
-            expired = [
-                track_id for track_id, metadata in track_cache.items()
-                if (current_time - metadata.cached_at) > timedelta(minutes=CACHE_EXPIRY_MINUTES)
-            ]
-            
-            for track_id in expired:
-                track_cache.pop(track_id, None)
-            
+            await asyncio.sleep(600)
+            cutoff  = datetime.now() - timedelta(minutes=CACHE_EXPIRY_MINUTES)
+            expired = [tid for tid, s in _session_cache.items() if s.cached_at < cutoff]
+            for tid in expired:
+                evict_session(tid)
             if expired:
-                logger.info(f"{Emoji.INFO} Cleaned {len(expired)} expired cache entries")
-        
+                logger.info(f"{Emoji.INFO} GC: evicted {len(expired)} expired sessions")
         except Exception as e:
-            logger.error(f"Cache cleanup error: {e}")
+            logger.error(f"Cache GC error: {e}")
 
 
-async def monitor_spotify_client_health():
-    """Monitor Spotify client health and recreate if needed"""
-    
-    global spotify_client
-    
-    while True:
-        try:
-            await asyncio.sleep(1800)  # Check every 30 minutes
-            
-            if not spotify_client:
-                logger.warning(f"{Emoji.WARNING} Spotify client not available, attempting recreation...")
-                spotify_client = create_robust_spotify_client()
-            else:
-                # Simple health check
-                try:
-                    test_track_id = "3n3Ppam7vgaVa1iaRUc9Lp"  # A known valid track
-                    await asyncio.wait_for(
-                        asyncio.to_thread(spotify_client.track, test_track_id),
-                        timeout=10
-                    )
-                    logger.debug("Spotify client health check: OK")
-                except Exception as e:
-                    logger.warning(f"{Emoji.WARNING} Spotify client health check failed: {e}")
-                    logger.info("Recreating Spotify client...")
-                    spotify_client = create_robust_spotify_client()
-        
-        except Exception as e:
-            logger.error(f"Health monitor error: {e}")
-
-
-# Start background tasks
-asyncio.create_task(cleanup_expired_track_cache())
-asyncio.create_task(monitor_spotify_client_health())
+asyncio.create_task(_cache_gc())
