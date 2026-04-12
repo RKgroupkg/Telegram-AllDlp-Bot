@@ -1,3 +1,4 @@
+# File: src/helpers/dlp/_Thumb/thumbnail.py
 # Copyright (c) 2025 Rkgroup.
 # Quick Dl is an open-source Downloader bot licensed under MIT.
 # All rights reserved where applicable.

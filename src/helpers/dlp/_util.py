@@ -1,3 +1,4 @@
+# File: src/helpers/dlp/_util.py
 def format_size(size_bytes):
     """Format file size in human readable format"""
     if size_bytes < 1024:

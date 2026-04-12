@@ -1,3 +1,4 @@
+# File: src/plugins/developer/updater.py
 #  Copyright (c) 2025 Rkgroup.
 #  Quick Dl unified updater module
 

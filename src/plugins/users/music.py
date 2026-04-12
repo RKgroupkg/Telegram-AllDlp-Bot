@@ -1,3 +1,4 @@
+# File: src/plugins/users/music.py
 from datetime import timedelta
 from typing import List, Union
 
