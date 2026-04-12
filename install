@@ -71,23 +71,17 @@ install_ffmpeg() {
 
 # ---------- NEW SECTION ---------- #
 install_deno() {
-    echo -e "${YELLOW}Checking for Deno (required for yt-dlp 2025+)...${NC}"
-    if command -v deno &> /dev/null; then
-        echo -e "${GREEN}Deno is already installed.${NC}"
-        deno --version
-        return 0
-    fi
-    echo -e "${YELLOW}Installing Deno...${NC}"
+    echo -e "${YELLOW}Installing Deno (fresh install for Render free tier)...${NC}"
     curl -fsSL https://deno.land/install.sh | sh
     export DENO_INSTALL="$HOME/.deno"
     export PATH="$DENO_INSTALL/bin:$PATH"
 
     if command -v deno &> /dev/null; then
-        echo -e "${GREEN}Deno installed successfully.${NC}"
-        deno --version
+        echo -e "${GREEN}✓ Deno installed: $(deno --version | head -1)${NC}"
         return 0
     else
-        echo -e "${RED}Failed to install Deno.${NC}"
+        echo -e "${RED}✗ Deno install failed. PATH: $PATH${NC}"
+        ls "$HOME/.deno/bin/" 2>/dev/null || echo -e "${RED}Deno bin dir missing.${NC}"
         return 1
     fi
 }
