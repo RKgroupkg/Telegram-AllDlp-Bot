@@ -34,14 +34,65 @@ error_exit() {
 setup_path() {
     log_section "Environment Setup"
 
-    # Use project-local deno (persists between build and start on Render)
     export DENO_INSTALL="/opt/render/project/src/.deno"
-    export PATH="$DENO_INSTALL/bin:$HOME/.local/bin:$PATH"
+
+    # Add paths without duplicates
+    case ":$PATH:" in
+        *":$DENO_INSTALL/bin:"*) ;;
+        *) export PATH="$DENO_INSTALL/bin:$PATH" ;;
+    esac
+    case ":$PATH:" in
+        *":$HOME/.local/bin:"*) ;;
+        *) export PATH="$HOME/.local/bin:$PATH" ;;
+    esac
 
     log_info "Home     : $HOME"
     log_info "Work Dir : $(pwd)"
     log_info "Deno dir : $DENO_INSTALL/bin"
 }
+
+# ─── Deno Setup ───────────────────────────────────
+setup_deno() {
+    log_section "Deno Setup"
+
+    # Already installed and working
+    if [ -x "$DENO_INSTALL/bin/deno" ]; then
+        log_success "Deno already installed: $("$DENO_INSTALL/bin/deno" --version 2>&1 | head -1)"
+        return 0
+    fi
+
+    log_info "Deno not found — installing now..."
+    mkdir -p "$DENO_INSTALL/bin"
+
+    # Try unzip method first (faster)
+    if command -v unzip &> /dev/null; then
+        log_info "Downloading Deno binary..."
+        curl -fsSL https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip \
+            -o "$DENO_INSTALL/deno.zip" 2>&1
+
+        if [ $? -eq 0 ]; then
+            unzip -o "$DENO_INSTALL/deno.zip" -d "$DENO_INSTALL/bin/" 2>&1
+            chmod +x "$DENO_INSTALL/bin/deno"
+            rm -f "$DENO_INSTALL/deno.zip"
+        else
+            log_warn "Direct download failed — trying install script fallback..."
+            curl -fsSL https://deno.land/install.sh | DENO_INSTALL="$DENO_INSTALL" sh 2>&1
+        fi
+    else
+        # Fallback to install script
+        log_info "unzip not available — using Deno install script..."
+        curl -fsSL https://deno.land/install.sh | DENO_INSTALL="$DENO_INSTALL" sh 2>&1
+    fi
+
+    # Final verify
+    if [ -x "$DENO_INSTALL/bin/deno" ]; then
+        log_success "Deno installed: $("$DENO_INSTALL/bin/deno" --version 2>&1 | head -1)"
+    else
+        log_warn "Deno install failed — YouTube n-challenge will fail"
+        log_warn "Bot will still start but YouTube downloads may be broken"
+    fi
+}
+
 # ─── OS Check ─────────────────────────────────────
 check_os() {
     log_section "OS Check"
@@ -81,7 +132,7 @@ check_tools() {
     log_section "Tools Check"
     local critical_ok=true
 
-    # yt-dlp — critical, bot is useless without it
+    # yt-dlp — critical
     if command -v yt-dlp &> /dev/null; then
         log_success "yt-dlp  : $(yt-dlp --version)"
     else
@@ -89,21 +140,11 @@ check_tools() {
         critical_ok=false
     fi
 
-    # deno — try command, then direct path, then give up
-    if command -v deno &> /dev/null; then
-        log_success "deno    : $(deno --version 2>&1 | head -1)"
-    elif [ -x "$DENO_INSTALL/bin/deno" ]; then
-        log_warn "deno    : found at $DENO_INSTALL/bin/deno but not in PATH — fixing..."
-        export PATH="$DENO_INSTALL/bin:$PATH"
-        log_success "deno    : $("$DENO_INSTALL/bin/deno" --version 2>&1 | head -1)"
-    elif [ -f "$DENO_INSTALL/bin/deno" ]; then
-        log_warn "deno    : binary exists but not executable — fixing permissions..."
-        chmod +x "$DENO_INSTALL/bin/deno"
-        export PATH="$DENO_INSTALL/bin:$PATH"
+    # deno — should be set up by now
+    if [ -x "$DENO_INSTALL/bin/deno" ]; then
         log_success "deno    : $("$DENO_INSTALL/bin/deno" --version 2>&1 | head -1)"
     else
         log_warn "deno    : NOT FOUND — YouTube n-challenge will fail"
-        log_warn "          Re-run install script to fix."
     fi
 
     # ffmpeg — warning only
@@ -161,6 +202,7 @@ main() {
     echo -e "${NC}"
 
     setup_path
+    setup_deno    # ← installs deno fresh every start if missing
     check_os
     check_python
     check_tools
