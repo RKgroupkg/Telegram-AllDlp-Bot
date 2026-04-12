@@ -1,14 +1,11 @@
-# The MIT License(MIT)
-# Copyright(c) 2023 RKgroupkg
-# (Full license header kept — omitted here for brevity)
-
 #!/usr/bin/env bash
 # ==================================================
 # RKgroupkg - Start Script
 # Optimized for Render Free Tier
 # ==================================================
 
-set -euo pipefail  # Exit on error, unset vars, pipe failures
+# NOTE: No set -euo pipefail here intentionally —
+# we handle errors manually so warnings don't kill the script
 
 # ─── Colors ───────────────────────────────────────
 RED='\033[0;31m'
@@ -29,22 +26,28 @@ log_section() { echo -e "\n${CYAN}${BOLD}── $1 ──${NC}"; }
 # ─── Error Handler ────────────────────────────────
 error_exit() {
     log_error "$1"
-    log_error "Start script failed at line $2. Aborting."
+    log_error "Aborting at line ${2:-?}."
     exit 1
 }
-trap 'error_exit "Unexpected error occurred." "$LINENO"' ERR
 
 # ─── PATH Setup ───────────────────────────────────
 setup_path() {
     log_section "Environment Setup"
 
     export DENO_INSTALL="$HOME/.deno"
-    export PATH="$DENO_INSTALL/bin:$HOME/.local/bin:$PATH"
+    # Avoid duplicate PATH entries
+    case ":$PATH:" in
+        *":$DENO_INSTALL/bin:"*) ;; # already in PATH
+        *) export PATH="$DENO_INSTALL/bin:$PATH" ;;
+    esac
+    case ":$PATH:" in
+        *":$HOME/.local/bin:"*) ;;
+        *) export PATH="$HOME/.local/bin:$PATH" ;;
+    esac
 
     log_info "Home     : $HOME"
     log_info "Work Dir : $(pwd)"
     log_info "Deno dir : $DENO_INSTALL/bin"
-    log_info "PATH     : $PATH"
 }
 
 # ─── OS Check ─────────────────────────────────────
@@ -52,8 +55,7 @@ check_os() {
     log_section "OS Check"
     case "$OSTYPE" in
         msys|win32|cygwin)
-            error_exit "Windows is not supported. Use Linux or macOS." "$LINENO"
-            ;;
+            error_exit "Windows is not supported." "$LINENO" ;;
         linux*)
             log_success "OS: Linux" ;;
         darwin*)
@@ -76,7 +78,7 @@ check_python() {
     MINOR=$(echo "$PYTHON_VERSION" | cut -d. -f2)
 
     if [[ "$MAJOR" -lt 3 || ("$MAJOR" -eq 3 && "$MINOR" -lt 8) ]]; then
-        error_exit "Python $PYTHON_VERSION is too old. Requires Python 3.8+." "$LINENO"
+        error_exit "Python $PYTHON_VERSION is too old. Requires 3.8+." "$LINENO"
     fi
 
     log_success "Python $PYTHON_VERSION"
@@ -85,34 +87,45 @@ check_python() {
 # ─── Tools Check ──────────────────────────────────
 check_tools() {
     log_section "Tools Check"
-    local all_ok=true
+    local critical_ok=true
 
-    # yt-dlp — critical
+    # yt-dlp — critical, bot is useless without it
     if command -v yt-dlp &> /dev/null; then
         log_success "yt-dlp  : $(yt-dlp --version)"
     else
         log_error "yt-dlp  : NOT FOUND — downloads will fail"
-        all_ok=false
+        critical_ok=false
     fi
 
-    # deno — important for YouTube
+    # deno — try command, then direct path, then give up
     if command -v deno &> /dev/null; then
-        log_success "deno    : $(deno --version | head -1)"
+        log_success "deno    : $(deno --version 2>&1 | head -1)"
+    elif [ -x "$DENO_INSTALL/bin/deno" ]; then
+        log_warn "deno    : found at $DENO_INSTALL/bin/deno but not in PATH — fixing..."
+        export PATH="$DENO_INSTALL/bin:$PATH"
+        log_success "deno    : $("$DENO_INSTALL/bin/deno" --version 2>&1 | head -1)"
+    elif [ -f "$DENO_INSTALL/bin/deno" ]; then
+        log_warn "deno    : binary exists but not executable — fixing permissions..."
+        chmod +x "$DENO_INSTALL/bin/deno"
+        export PATH="$DENO_INSTALL/bin:$PATH"
+        log_success "deno    : $("$DENO_INSTALL/bin/deno" --version 2>&1 | head -1)"
     else
         log_warn "deno    : NOT FOUND — YouTube n-challenge will fail"
-        log_warn "         Run install script to fix this."
+        log_warn "          Re-run install script to fix."
     fi
 
-    # ffmpeg — important for merging
+    # ffmpeg — warning only
     if command -v ffmpeg &> /dev/null; then
         log_success "ffmpeg  : $(ffmpeg -version 2>&1 | head -1 | cut -d' ' -f1-3)"
     else
         log_warn "ffmpeg  : NOT FOUND — audio/video merging may fail"
     fi
 
-    # python3 packages sanity check
-    if python3 -c "import telethon" &> /dev/null || python3 -c "import pyrogram" &> /dev/null; then
-        log_success "telegram: client library found"
+    # telegram client library
+    if python3 -c "import telethon" &> /dev/null 2>&1; then
+        log_success "telegram: telethon found"
+    elif python3 -c "import pyrogram" &> /dev/null 2>&1; then
+        log_success "telegram: pyrogram found"
     else
         log_warn "telegram: no client library found (telethon/pyrogram)"
     fi
@@ -121,11 +134,11 @@ check_tools() {
     if [ -f "cookies/cookie_1.txt" ]; then
         log_success "cookies : found at cookies/cookie_1.txt"
     else
-        log_warn "cookies : NOT FOUND at cookies/cookie_1.txt — some downloads may fail"
+        log_warn "cookies : NOT FOUND at cookies/cookie_1.txt"
     fi
 
-    if [ "$all_ok" = false ]; then
-        error_exit "Critical tools missing. Check logs above." "$LINENO"
+    if [ "$critical_ok" = false ]; then
+        error_exit "Critical tools missing. Aborting." "$LINENO"
     fi
 }
 
@@ -135,12 +148,14 @@ run_bot() {
     log_info "Launching: python3 -m src"
     echo ""
 
-    # Propagate PATH to python subprocess explicitly
     export PATH
     export DENO_INSTALL
 
-    if ! python3 -m src; then
-        error_exit "Bot exited with an error. Check logs above." "$LINENO"
+    python3 -m src
+    EXIT_CODE=$?
+
+    if [ $EXIT_CODE -ne 0 ]; then
+        error_exit "Bot exited with code $EXIT_CODE. Check logs above." "$LINENO"
     fi
 }
 
