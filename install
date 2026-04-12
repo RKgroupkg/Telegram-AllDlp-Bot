@@ -69,7 +69,6 @@ install_ffmpeg() {
     log_info "Installing FFmpeg via static binary (no root needed)..."
     mkdir -p "$HOME/.local/bin"
 
-    # Download static binary — no apt/sudo needed
     FFMPEG_URL="https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz"
     TMP_DIR=$(mktemp -d)
 
@@ -102,46 +101,23 @@ install_ffmpeg() {
     fi
 }
 
-install_deno() {
-    log_info "Installing Deno into project dir (persists on Render)..."
-
-    DENO_DIR="/opt/render/project/src/.deno"
-    mkdir -p "$DENO_DIR/bin"
-
-    # Download deno binary directly into project dir
-    curl -fsSL https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip \
-        -o "$DENO_DIR/deno.zip"
-
-    unzip -o "$DENO_DIR/deno.zip" -d "$DENO_DIR/bin/"
-    chmod +x "$DENO_DIR/bin/deno"
-    rm "$DENO_DIR/deno.zip"
-
-    export DENO_INSTALL="$DENO_DIR"
-    export PATH="$DENO_DIR/bin:$PATH"
-
-    if command -v deno &> /dev/null; then
-        log_success "Deno installed: $(deno --version | head -1)"
-        return 0
-    else
-        log_error "Deno install failed."
-        return 1
-    fi
-}
-
 move_cookie_files() {
     log_info "Checking for cookie files..."
     mkdir -p cookies
     MOVED=0
     while IFS= read -r file; do
-        if [ -f "$file" ]; then
-            mv "$file" cookies/
-            log_success "Moved: $file → cookies/"
-            MOVED=$((MOVED + 1))
+        BASENAME=$(basename "$file")
+        if [ -f "cookies/$BASENAME" ]; then
+            log_warn "Cookie already in cookies/ — skipping: $BASENAME"
+            continue
         fi
+        mv "$file" cookies/
+        log_success "Moved: $file → cookies/"
+        MOVED=$((MOVED + 1))
     done < <(find . -maxdepth 1 -type f \( -name "cookie_*.txt" -o -name "cookies_*.txt" \))
 
     if [ "$MOVED" -eq 0 ]; then
-        log_warn "No cookie files found to move. Make sure cookie_*.txt is in repo root."
+        log_warn "No new cookie files to move."
     else
         log_success "$MOVED cookie file(s) moved to cookies/"
     fi
@@ -150,11 +126,11 @@ move_cookie_files() {
 final_checks() {
     echo ""
     log_info "─── Final Environment Check ───"
-    command -v python3 &> /dev/null  && log_success "python3 : $(python3 --version)"   || log_error "python3 : NOT FOUND"
-    command -v pip3    &> /dev/null  && log_success "pip3    : $(pip3 --version)"       || log_error "pip3    : NOT FOUND"
-    command -v yt-dlp  &> /dev/null  && log_success "yt-dlp  : $(yt-dlp --version)"    || log_error "yt-dlp  : NOT FOUND"
-    command -v ffmpeg  &> /dev/null  && log_success "ffmpeg  : found"                   || log_warn  "ffmpeg  : NOT FOUND"
-    command -v deno    &> /dev/null  && log_success "deno    : $(deno --version | head -1)" || log_warn "deno : NOT FOUND (YouTube may fail)"
+    command -v python3 &> /dev/null && log_success "python3 : $(python3 --version)"  || log_error "python3 : NOT FOUND"
+    command -v pip3    &> /dev/null && log_success "pip3    : $(pip3 --version)"      || log_error "pip3    : NOT FOUND"
+    command -v yt-dlp  &> /dev/null && log_success "yt-dlp  : $(yt-dlp --version)"   || log_error "yt-dlp  : NOT FOUND"
+    command -v ffmpeg  &> /dev/null && log_success "ffmpeg  : found"                  || log_warn  "ffmpeg  : NOT FOUND"
+    log_warn "deno    : will be installed at runtime in start script"
     echo ""
 }
 
@@ -165,11 +141,9 @@ main() {
     echo -e "${BLUE}=================================================${NC}"
     log_info "Home    : $HOME"
     log_info "WorkDir : $(pwd)"
-    log_info "PATH    : $PATH"
     echo ""
 
     install_pip          || { log_error "pip install failed. Aborting."; exit 1; }
-    install_deno         || log_warn "Deno not installed — YouTube n-challenge will fail."
     install_requirements || { log_error "Requirements install failed. Aborting."; exit 1; }
     install_ffmpeg       || log_warn "FFmpeg not installed — audio/video merging may fail."
 
