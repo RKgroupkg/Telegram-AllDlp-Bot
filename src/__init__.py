@@ -20,6 +20,13 @@ from src.logging import LOGGER
 
 # for render and koyeb comment it ou uf you dont need it
 
+
+import os
+
+# Ensure Deno is in PATH for yt-dlp n-challenge solver
+os.environ["PATH"] = f"/opt/render/project/src/.deno/bin:{os.environ.get('PATH', '')}"
+os.environ["DENO_INSTALL"] = "/opt/render/project/src/.deno"
+
 service = KeepAliveService(
     log_level=log.ERROR, ping_interval=40  # no need for info  # Ping every 40 sec
 )
