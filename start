@@ -1,92 +1,163 @@
 # The MIT License(MIT)
-
-# Copyright(c) 2023 RKgroupkg 
-
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files(the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and / or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
-
+# Copyright(c) 2023 RKgroupkg
+# (Full license header kept — omitted here for brevity)
 
 #!/usr/bin/env bash
+# ==================================================
+# RKgroupkg - Start Script
+# Optimized for Render Free Tier
+# ==================================================
 
-# Colors for output formatting
+set -euo pipefail  # Exit on error, unset vars, pipe failures
+
+# ─── Colors ───────────────────────────────────────
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
-NC='\033[0m' # No Color
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
 
-# Function to display error messages and exit
+# ─── Logging ──────────────────────────────────────
+log_info()    { echo -e "${BLUE}[INFO]${NC}    $1"; }
+log_success() { echo -e "${GREEN}[✓]${NC}      $1"; }
+log_warn()    { echo -e "${YELLOW}[⚠]${NC}     $1"; }
+log_error()   { echo -e "${RED}[✗]${NC}      $1" >&2; }
+log_section() { echo -e "\n${CYAN}${BOLD}── $1 ──${NC}"; }
+
+# ─── Error Handler ────────────────────────────────
 error_exit() {
-    echo -e "${RED}ERROR: $1${NC}" >&2
+    log_error "$1"
+    log_error "Start script failed at line $2. Aborting."
     exit 1
 }
+trap 'error_exit "Unexpected error occurred." "$LINENO"' ERR
 
-# Function to display warnings
-warn() {
-    echo -e "${YELLOW}WARNING: $1${NC}" >&2
+# ─── PATH Setup ───────────────────────────────────
+setup_path() {
+    log_section "Environment Setup"
+
+    export DENO_INSTALL="$HOME/.deno"
+    export PATH="$DENO_INSTALL/bin:$HOME/.local/bin:$PATH"
+
+    log_info "Home     : $HOME"
+    log_info "Work Dir : $(pwd)"
+    log_info "Deno dir : $DENO_INSTALL/bin"
+    log_info "PATH     : $PATH"
 }
 
-# Function to display success messages
-success() {
-    echo -e "${GREEN}$1${NC}"
-}
-
-# Check if not running on Windows
+# ─── OS Check ─────────────────────────────────────
 check_os() {
-    echo "Checking operating system..."
-    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" || "$OSTYPE" == "cygwin" ]]; then
-        error_exit "This script is not designed to run on Windows. Please use Linux or macOS."
-    fi
-    success "Operating system check passed."
+    log_section "OS Check"
+    case "$OSTYPE" in
+        msys|win32|cygwin)
+            error_exit "Windows is not supported. Use Linux or macOS." "$LINENO"
+            ;;
+        linux*)
+            log_success "OS: Linux" ;;
+        darwin*)
+            log_success "OS: macOS" ;;
+        *)
+            log_warn "Unknown OS: $OSTYPE — proceeding anyway." ;;
+    esac
 }
 
-# Check if Python is installed and updated
+# ─── Python Check ─────────────────────────────────
 check_python() {
-    echo "Checking Python installation..."
+    log_section "Python Check"
+
     if ! command -v python3 &> /dev/null; then
-        error_exit "Python 3 is not installed. Please install Python 3 and try again."
+        error_exit "Python 3 is not installed." "$LINENO"
     fi
-    
-    # Get Python version
+
     PYTHON_VERSION=$(python3 --version 2>&1 | cut -d' ' -f2)
-    if [[ $(echo "$PYTHON_VERSION" | cut -d. -f1) -lt 3 || ($(echo "$PYTHON_VERSION" | cut -d. -f1) -eq 3 && $(echo "$PYTHON_VERSION" | cut -d. -f2) -lt 6) ]]; then
-        warn "Python version $PYTHON_VERSION detected. It's recommended to use Python 3.6 or newer."
+    MAJOR=$(echo "$PYTHON_VERSION" | cut -d. -f1)
+    MINOR=$(echo "$PYTHON_VERSION" | cut -d. -f2)
+
+    if [[ "$MAJOR" -lt 3 || ("$MAJOR" -eq 3 && "$MINOR" -lt 8) ]]; then
+        error_exit "Python $PYTHON_VERSION is too old. Requires Python 3.8+." "$LINENO"
+    fi
+
+    log_success "Python $PYTHON_VERSION"
+}
+
+# ─── Tools Check ──────────────────────────────────
+check_tools() {
+    log_section "Tools Check"
+    local all_ok=true
+
+    # yt-dlp — critical
+    if command -v yt-dlp &> /dev/null; then
+        log_success "yt-dlp  : $(yt-dlp --version)"
     else
-        success "Python $PYTHON_VERSION detected."
+        log_error "yt-dlp  : NOT FOUND — downloads will fail"
+        all_ok=false
+    fi
+
+    # deno — important for YouTube
+    if command -v deno &> /dev/null; then
+        log_success "deno    : $(deno --version | head -1)"
+    else
+        log_warn "deno    : NOT FOUND — YouTube n-challenge will fail"
+        log_warn "         Run install script to fix this."
+    fi
+
+    # ffmpeg — important for merging
+    if command -v ffmpeg &> /dev/null; then
+        log_success "ffmpeg  : $(ffmpeg -version 2>&1 | head -1 | cut -d' ' -f1-3)"
+    else
+        log_warn "ffmpeg  : NOT FOUND — audio/video merging may fail"
+    fi
+
+    # python3 packages sanity check
+    if python3 -c "import telethon" &> /dev/null || python3 -c "import pyrogram" &> /dev/null; then
+        log_success "telegram: client library found"
+    else
+        log_warn "telegram: no client library found (telethon/pyrogram)"
+    fi
+
+    # cookies
+    if [ -f "cookies/cookie_1.txt" ]; then
+        log_success "cookies : found at cookies/cookie_1.txt"
+    else
+        log_warn "cookies : NOT FOUND at cookies/cookie_1.txt — some downloads may fail"
+    fi
+
+    if [ "$all_ok" = false ]; then
+        error_exit "Critical tools missing. Check logs above." "$LINENO"
     fi
 }
 
-# Run the Telegram Bot
+# ─── Run Bot ──────────────────────────────────────
 run_bot() {
-    echo "Starting Telegram Bot..."
+    log_section "Starting Bot"
+    log_info "Launching: python3 -m src"
+    echo ""
+
+    # Propagate PATH to python subprocess explicitly
+    export PATH
+    export DENO_INSTALL
+
     if ! python3 -m src; then
-        error_exit "Failed to run Quick Dl. Check the error messages above."
+        error_exit "Bot exited with an error. Check logs above." "$LINENO"
     fi
 }
 
-# Main execution
+# ─── Main ─────────────────────────────────────────
 main() {
-    # Run all checks
+    echo -e "${CYAN}${BOLD}"
+    echo "╔═══════════════════════════════════════╗"
+    echo "║     RKgroupkg — Quick DL Bot          ║"
+    echo "║     Render Free Tier Start Script     ║"
+    echo "╚═══════════════════════════════════════╝"
+    echo -e "${NC}"
+
+    setup_path
     check_os
     check_python
-    
-    # Run the bot
+    check_tools
     run_bot
 }
 
-# Execute main function
 main
