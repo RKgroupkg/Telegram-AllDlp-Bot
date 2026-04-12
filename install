@@ -1,112 +1,187 @@
 #!/bin/bash
 # ==================================================
 # RKgroupkg - Install Script (yt-dlp + Deno Support)
+# Optimized for Render Free Tier
 # ==================================================
 
 # Color codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m'
+
+# ---------- Helpers ---------- #
+log_info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
+log_warn()    { echo -e "${YELLOW}[⚠]${NC} $1"; }
+log_error()   { echo -e "${RED}[✗]${NC} $1"; }
 
 # ---------- Functions ---------- #
 
 install_pip() {
-    echo -e "${YELLOW}Checking for pip...${NC}"
+    log_info "Checking pip3..."
     if command -v pip3 &> /dev/null; then
-        echo -e "${GREEN}Pip is already installed.${NC}"
+        log_success "pip3 already installed: $(pip3 --version)"
         return 0
     fi
-    echo -e "${YELLOW}Installing pip...${NC}"
+    log_info "Installing pip3..."
     if command -v apt-get &> /dev/null; then
-        apt-get update
-        apt-get install -y python3-pip
+        apt-get update -y && apt-get install -y python3-pip
     elif command -v yum &> /dev/null; then
         yum install -y python3-pip
     elif command -v brew &> /dev/null; then
         brew install python
     else
-        echo -e "${RED}Unsupported package manager.${NC}"
+        log_error "Unsupported package manager. Cannot install pip."
         return 1
     fi
-    command -v pip3 &> /dev/null && echo -e "${GREEN}Pip installed successfully.${NC}" || {
-        echo -e "${RED}Failed to install pip.${NC}"
+    if command -v pip3 &> /dev/null; then
+        log_success "pip3 installed: $(pip3 --version)"
+    else
+        log_error "pip3 install failed."
         return 1
-    }
+    fi
 }
 
 install_requirements() {
-    echo -e "${YELLOW}Installing requirements...${NC}"
+    log_info "Installing Python requirements..."
     if [ ! -f "requirements.txt" ]; then
-        echo -e "${RED}requirements.txt not found.${NC}"
+        log_error "requirements.txt not found in $(pwd)"
         return 1
     fi
-    # Upgrade pip before install
-    pip3 install --upgrade pip
+    pip3 install --upgrade pip --quiet
     pip3 install -r requirements.txt
-    [ $? -eq 0 ] && echo -e "${GREEN}Requirements installed.${NC}" || {
-        echo -e "${RED}Failed to install requirements.${NC}"
+    if [ $? -eq 0 ]; then
+        log_success "Requirements installed."
+    else
+        log_error "Failed to install requirements."
         return 1
-    }
+    fi
 }
 
 install_ffmpeg() {
-    echo -e "${YELLOW}Installing FFmpeg...${NC}"
-    if command -v apt-get &> /dev/null; then
-        apt-get update
-        apt-get install -y ffmpeg
-    elif command -v yum &> /dev/null; then
-        yum install -y ffmpeg
-    elif command -v brew &> /dev/null; then
-        brew install ffmpeg
-    else
-        echo -e "${RED}Unsupported package manager.${NC}"
+    log_info "Checking FFmpeg..."
+    if command -v ffmpeg &> /dev/null; then
+        log_success "FFmpeg already installed: $(ffmpeg -version 2>&1 | head -1)"
+        return 0
+    fi
+    log_info "Installing FFmpeg via static binary (no root needed)..."
+    mkdir -p "$HOME/.local/bin"
+
+    # Download static binary — no apt/sudo needed
+    FFMPEG_URL="https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz"
+    TMP_DIR=$(mktemp -d)
+
+    curl -L "$FFMPEG_URL" -o "$TMP_DIR/ffmpeg.tar.xz" 2>&1
+    if [ $? -ne 0 ]; then
+        log_error "Failed to download FFmpeg static binary."
+        rm -rf "$TMP_DIR"
         return 1
     fi
-    command -v ffmpeg &> /dev/null && echo -e "${GREEN}FFmpeg installed successfully.${NC}" || {
-        echo -e "${RED}Failed to install FFmpeg.${NC}"
+
+    tar -xf "$TMP_DIR/ffmpeg.tar.xz" -C "$TMP_DIR" 2>&1
+    FFMPEG_BIN=$(find "$TMP_DIR" -name "ffmpeg" -type f | head -1)
+
+    if [ -z "$FFMPEG_BIN" ]; then
+        log_error "FFmpeg binary not found after extraction."
+        rm -rf "$TMP_DIR"
         return 1
-    }
+    fi
+
+    mv "$FFMPEG_BIN" "$HOME/.local/bin/ffmpeg"
+    chmod +x "$HOME/.local/bin/ffmpeg"
+    export PATH="$HOME/.local/bin:$PATH"
+    rm -rf "$TMP_DIR"
+
+    if command -v ffmpeg &> /dev/null; then
+        log_success "FFmpeg installed: $(ffmpeg -version 2>&1 | head -1)"
+    else
+        log_error "FFmpeg install failed."
+        return 1
+    fi
 }
 
-# ---------- NEW SECTION ---------- #
 install_deno() {
-    echo -e "${YELLOW}Installing Deno...${NC}"
-    
-    curl -fsSL https://deno.land/install.sh | sh 2>&1
+    log_info "Installing Deno (JS runtime for yt-dlp n-challenge)..."
+
+    curl -fsSL https://deno.land/install.sh | sh
+    CURL_EXIT=$?
 
     export DENO_INSTALL="$HOME/.deno"
     export PATH="$DENO_INSTALL/bin:$PATH"
 
+    if [ $CURL_EXIT -ne 0 ]; then
+        log_error "Deno install curl failed with exit code $CURL_EXIT"
+        return 1
+    fi
+
+    if [ ! -f "$DENO_INSTALL/bin/deno" ]; then
+        log_error "Deno binary missing at $DENO_INSTALL/bin/deno"
+        log_error "Directory contents:"
+        ls "$DENO_INSTALL/bin/" 2>/dev/null || log_error "Directory does not exist."
+        return 1
+    fi
+
     if command -v deno &> /dev/null; then
-        echo -e "${GREEN}✓ Deno: $(deno --version | head -1)${NC}"
+        log_success "Deno installed: $(deno --version | head -1)"
         return 0
     else
-        echo -e "${RED}✗ Deno install failed. PATH: $PATH${NC}"
-        ls "$HOME/.deno/bin/" 2>/dev/null || echo -e "${RED}Deno bin dir missing.${NC}"
+        log_error "Deno binary exists but not accessible in PATH."
+        log_error "Current PATH: $PATH"
         return 1
     fi
 }
+
 move_cookie_files() {
-    echo -e "${YELLOW}Checking and moving cookie files...${NC}"
+    log_info "Checking for cookie files..."
     mkdir -p cookies
-    find . -maxdepth 1 -type f \( -name "cookie_*.txt" -o -name "cookies_*.txt" \) | while read -r file; do
-        mv "$file" cookies/
-        echo -e "${GREEN}Moved:${NC} $file → cookies/"
-    done
+    MOVED=0
+    while IFS= read -r file; do
+        if [ -f "$file" ]; then
+            mv "$file" cookies/
+            log_success "Moved: $file → cookies/"
+            MOVED=$((MOVED + 1))
+        fi
+    done < <(find . -maxdepth 1 -type f \( -name "cookie_*.txt" -o -name "cookies_*.txt" \))
+
+    if [ "$MOVED" -eq 0 ]; then
+        log_warn "No cookie files found to move. Make sure cookie_*.txt is in repo root."
+    else
+        log_success "$MOVED cookie file(s) moved to cookies/"
+    fi
+}
+
+final_checks() {
+    echo ""
+    log_info "─── Final Environment Check ───"
+    command -v python3 &> /dev/null  && log_success "python3 : $(python3 --version)"   || log_error "python3 : NOT FOUND"
+    command -v pip3    &> /dev/null  && log_success "pip3    : $(pip3 --version)"       || log_error "pip3    : NOT FOUND"
+    command -v yt-dlp  &> /dev/null  && log_success "yt-dlp  : $(yt-dlp --version)"    || log_error "yt-dlp  : NOT FOUND"
+    command -v ffmpeg  &> /dev/null  && log_success "ffmpeg  : found"                   || log_warn  "ffmpeg  : NOT FOUND"
+    command -v deno    &> /dev/null  && log_success "deno    : $(deno --version | head -1)" || log_warn "deno : NOT FOUND (YouTube may fail)"
+    echo ""
 }
 
 # ---------- MAIN ---------- #
 main() {
-    echo -e "${YELLOW}Starting installation process...${NC}"
+    echo -e "${BLUE}=================================================${NC}"
+    echo -e "${BLUE}   RKgroupkg Install — Render Free Tier          ${NC}"
+    echo -e "${BLUE}=================================================${NC}"
+    log_info "Home    : $HOME"
+    log_info "WorkDir : $(pwd)"
+    log_info "PATH    : $PATH"
+    echo ""
 
-    install_pip || exit 1
-    install_deno || echo -e "${YELLOW}⚠️ Warning: Deno not installed, yt-dlp may fail for YouTube.${NC}"
-    install_requirements || exit 1
-    install_ffmpeg || exit 1
+    install_pip          || { log_error "pip install failed. Aborting."; exit 1; }
+    install_deno         || log_warn "Deno not installed — YouTube n-challenge will fail."
+    install_requirements || { log_error "Requirements install failed. Aborting."; exit 1; }
+    install_ffmpeg       || log_warn "FFmpeg not installed — audio/video merging may fail."
 
-    echo -e "${GREEN}Installation completed successfully!${NC}"
+    echo ""
+    log_success "Installation complete!"
     move_cookie_files
+    final_checks
 }
 
 main
