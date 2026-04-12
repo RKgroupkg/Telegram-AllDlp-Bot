@@ -103,32 +103,27 @@ install_ffmpeg() {
 }
 
 install_deno() {
-    log_info "Installing Deno (JS runtime for yt-dlp n-challenge)..."
+    log_info "Installing Deno into project dir (persists on Render)..."
 
-    curl -fsSL https://deno.land/install.sh | sh
-    CURL_EXIT=$?
+    DENO_DIR="/opt/render/project/src/.deno"
+    mkdir -p "$DENO_DIR/bin"
 
-    export DENO_INSTALL="$HOME/.deno"
-    export PATH="$DENO_INSTALL/bin:$PATH"
+    # Download deno binary directly into project dir
+    curl -fsSL https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip \
+        -o "$DENO_DIR/deno.zip"
 
-    if [ $CURL_EXIT -ne 0 ]; then
-        log_error "Deno install curl failed with exit code $CURL_EXIT"
-        return 1
-    fi
+    unzip -o "$DENO_DIR/deno.zip" -d "$DENO_DIR/bin/"
+    chmod +x "$DENO_DIR/bin/deno"
+    rm "$DENO_DIR/deno.zip"
 
-    if [ ! -f "$DENO_INSTALL/bin/deno" ]; then
-        log_error "Deno binary missing at $DENO_INSTALL/bin/deno"
-        log_error "Directory contents:"
-        ls "$DENO_INSTALL/bin/" 2>/dev/null || log_error "Directory does not exist."
-        return 1
-    fi
+    export DENO_INSTALL="$DENO_DIR"
+    export PATH="$DENO_DIR/bin:$PATH"
 
     if command -v deno &> /dev/null; then
         log_success "Deno installed: $(deno --version | head -1)"
         return 0
     else
-        log_error "Deno binary exists but not accessible in PATH."
-        log_error "Current PATH: $PATH"
+        log_error "Deno install failed."
         return 1
     fi
 }
