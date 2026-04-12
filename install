@@ -71,13 +71,15 @@ install_ffmpeg() {
 
 # ---------- NEW SECTION ---------- #
 install_deno() {
-    echo -e "${YELLOW}Installing Deno (fresh install for Render free tier)...${NC}"
-    curl -fsSL https://deno.land/install.sh | sh
+    echo -e "${YELLOW}Installing Deno...${NC}"
+    
+    curl -fsSL https://deno.land/install.sh | sh 2>&1
+
     export DENO_INSTALL="$HOME/.deno"
     export PATH="$DENO_INSTALL/bin:$PATH"
 
     if command -v deno &> /dev/null; then
-        echo -e "${GREEN}✓ Deno installed: $(deno --version | head -1)${NC}"
+        echo -e "${GREEN}✓ Deno: $(deno --version | head -1)${NC}"
         return 0
     else
         echo -e "${RED}✗ Deno install failed. PATH: $PATH${NC}"
@@ -85,7 +87,6 @@ install_deno() {
         return 1
     fi
 }
-
 move_cookie_files() {
     echo -e "${YELLOW}Checking and moving cookie files...${NC}"
     mkdir -p cookies
