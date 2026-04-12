@@ -26,7 +26,43 @@ from src.helpers.dlp._rex import LINK_REGEX_PATTERNS
 from src.helpers.ratelimiter import RateLimiter
 from src.logging import LOGGER
 
+from src.database.MongoDb import users
+
+
 logger = LOGGER(__name__)
+
+
+# ================= BAN CACHE =================
+
+BANNED_USERS_CACHE = set()
+LAST_BAN_CACHE_UPDATE = 0
+BAN_CACHE_TTL = 300  # 5 minutes
+
+
+async def _refresh_ban_cache():
+    global BANNED_USERS_CACHE, LAST_BAN_CACHE_UPDATE
+
+    try:
+        data = await users.collection.find(
+            {"banned": True}, {"_id": 1}
+        ).to_list(length=None)
+
+        BANNED_USERS_CACHE = {u["_id"] for u in data}
+        LAST_BAN_CACHE_UPDATE = time.time()
+
+    except Exception as e:
+        logger.error(f"Ban cache error: {e}")
+
+
+async def _is_banned(user_id: int) -> bool:
+    global LAST_BAN_CACHE_UPDATE
+
+    # refresh every 5 min
+    if time.time() - LAST_BAN_CACHE_UPDATE > BAN_CACHE_TTL:
+        await _refresh_ban_cache()
+
+    return user_id in BANNED_USERS_CACHE
+
 
 # ============================================================================
 # Authorization Filters
@@ -64,7 +100,7 @@ DOWNLOAD_RATE_LIMITER = RateLimiter(
 
 # Download callback operation rate limiter
 DOWNLOAD_CALLBACK_RATE_LIMITER = RateLimiter(
-    limit_sec=3, limit_min=15, interval_sec=1, interval_min=60
+    limit_sec=5, limit_min=20, interval_sec=1, interval_min=60
 )
 
 
@@ -89,6 +125,20 @@ async def check_rate_limit(_, __, update: Union[Message, CallbackQuery]) -> bool
     Returns:
         bool: True if not rate-limited, False otherwise
     """
+
+    # extract user
+    user = getattr(update, "from_user", None)
+    if not user:
+        return False
+    if not user:
+        return False
+
+    # 🚫 BAN CHECK (FIRST)
+    if await _is_banned(user.id):
+        logger.info(f"Ignored banned user: {user.id}")
+        return False
+
+
     # Check global rate limit first
     is_global_limited = await GLOBAL_RATE_LIMITER.acquire("global_update")
     if is_global_limited:
@@ -140,6 +190,17 @@ async def check_download_rate_limit(
     Returns:
         bool: True if not rate-limited, False otherwise
     """
+    user = getattr(update, "from_user", None)
+    if not user:
+        return False
+    if not user:
+        return False
+
+    # 🚫 BAN CHECK
+    if await _is_banned(user.id):
+        logger.info(f"Ignored banned user: {user.id}")
+        return False
+    
     # Check global rate limit first
     is_global_limited = await GLOBAL_RATE_LIMITER.acquire("global_update")
     if is_global_limited:
@@ -200,6 +261,11 @@ async def check_download_callback_rate_limit(_, __, update: CallbackQuery) -> bo
     Returns:
         bool: True if not rate-limited, False otherwise
     """
+
+    if await _is_banned(update.from_user.id):
+        logger.info(f"Ignored banned user: {update.from_user.id}")
+        return False
+    
     # Check global rate limit first
     is_global_limited = await GLOBAL_RATE_LIMITER.acquire("global_update")
     if is_global_limited:
@@ -210,8 +276,6 @@ async def check_download_callback_rate_limit(_, __, update: CallbackQuery) -> bo
 
     # Extract chat info
     chat_id = update.message.chat.id
-    chat_type = update.message.chat.type
-
     # Skip rate limiting for private chats
     # Check both callback-specific and general chat limits
     is_callback_limited = await DOWNLOAD_CALLBACK_RATE_LIMITER.acquire(chat_id)
@@ -496,6 +560,11 @@ allowed_url = filters.create(is_blocked_url)
 ytdlp_url = YTDLPUrlFilter.has_supported_url()
 
 
+
+# preload cache once at startup
+import asyncio
+asyncio.create_task(_refresh_ban_cache())
+
 # old
 
 # # Create the filter instance for easy importing
@@ -509,3 +578,4 @@ ytdlp_url = YTDLPUrlFilter.has_supported_url()
 # sudo_cmd = filters.create(sudo_users)
 # is_ratelimited = filters.create(ratelimiter)
 # is_download_rate_limited = filters.create(ratelimiter_dl)
+

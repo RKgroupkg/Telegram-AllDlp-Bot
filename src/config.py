@@ -84,6 +84,10 @@ MAX_VIDEO_LENGTH_MINUTES: int = int(getenv("MAX_VIDEO_LENGTH_MINUTES", "15"))
 SPOTIFY_CLIENT_ID: str = getenv("SPOTIFY_CLIENT_ID", "")
 SPOTIFY_CLIENT_SECRET: str = getenv("SPOTIFY_CLIENT_SECRET", "")
 
+# Render
+RENDER_API_KEY = getenv("RENDER_API_KEY", "")
+SERVICE_ID = getenv("SERVICE_ID", "")
+
 
 # Helper function to handle both direct env vars and .env format
 def parse_json_env(key, default=None):

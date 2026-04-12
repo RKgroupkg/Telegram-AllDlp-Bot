@@ -105,8 +105,11 @@ async def handle_youtube_link(client: Client, message: Message) -> None:
             for attempt in range(MAX_RETRIES):
                 try:
                     info = await fetch_youtube_info(video_id)
-                    if info.success:
-                        add_video_info_to_cache(video_id, info)
+                    if info:
+                        if info.success:
+                            add_video_info_to_cache(video_id, info)
+                            break
+                    else :
                         break
                 except Exception as e:
                     if attempt < MAX_RETRIES - 1:

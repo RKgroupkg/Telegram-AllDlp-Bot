@@ -49,10 +49,17 @@ DEV_TEXT = """
 
 - /broadcast
   ↳ Broadcast a message to all bot users and groups.
+
+- /render
+  ↳ It control render feature .
+
 """
 
 SUDO_TEXT = """
 ━━━〔 Sudo Commands 〕━━━
+
+- /users | /serverstats
+  ↳ control panel to view users, view stats, and perform admin actions.
 
 - /stats | /serverstats
   ↳ Get server resource stats (CPU, RAM, disk, etc).
