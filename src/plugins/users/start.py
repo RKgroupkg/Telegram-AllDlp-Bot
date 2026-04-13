@@ -66,23 +66,14 @@ GOBACK_2_BUTTON = [[InlineKeyboardButton("◄ Go Back", callback_data="COMMAND_B
 
 @bot.on_message(filters.command(["start", "help"]) & is_rate_limited)
 async def start(_, message: Message):
-    is_new_user = not await database.user_exists(message.from_user)
     await database.save_user(message.from_user)
-
-    caption = START_CAPTION
-    if is_new_user:
-        caption += (
-            "\n\n∷ **First time here?**\n"
-            "Tap **⌤ Commands** to explore, or drop any supported link here and I will handle the rest."
-        )
 
     await message.reply_photo(
         photo=QUICKDL_BANNER,
-        caption=caption,
+        caption=START_CAPTION,
         reply_markup=InlineKeyboardMarkup(START_BUTTON),
         quote=True,
     )
-
 
 # ──────────────────────────────────────────────
 #  Callback router
