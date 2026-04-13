@@ -1,139 +1,188 @@
-# File: src/helpers/start_constants.py
+# src/helpers/start_constants.py
 from src.version import (__license__, __pyro_version__, __python_version__,
                          __version__)
 
-# Load images into memory once at startup
 QUICKDL_BANNER = "https://raw.githubusercontent.com/RKgroupkg/Telegram-AllDlp-Bot/refs/heads/main/src/helpers/assets/QuickDlBanner.jpg"
-
-QUICKDL_LOGO = "https://raw.githubusercontent.com/RKgroupkg/Telegram-AllDlp-Bot/refs/heads/main/src/helpers/assets/QuickDlLogo.jpg"
-
-RKGROUP_LOGO = "https://raw.githubusercontent.com/RKgroupkg/Telegram-AllDlp-Bot/refs/heads/main/src/helpers/assets/RKgroupLogo.jpg"
+QUICKDL_LOGO   = "https://raw.githubusercontent.com/RKgroupkg/Telegram-AllDlp-Bot/refs/heads/main/src/helpers/assets/QuickDlLogo.jpg"
+RKGROUP_LOGO   = "https://raw.githubusercontent.com/RKgroupkg/Telegram-AllDlp-Bot/refs/heads/main/src/helpers/assets/RKgroupLogo.jpg"
 
 BOT_NAME = "@Quick_dlbot"
-DLP_TEXT = """
 
-<b>━━━〔 Dlp Cmd Doc 〕━━━</b>
+# ──────────────────────────────────────────────
+#  START / WELCOME
+# ──────────────────────────────────────────────
+START_CAPTION = """
+♔ **Welcome to Quick DL**
 
-<b>/yt</b>  <i>
-To download video, shots, or music from YouTube.  
-◇  You can also directly send the link using @vid or directly from YouTube.  
-◇  Select your format and quality for the video, music, or song and have it downloaded.
-</i>
-<b>/spotify</b><i>  
-To download Spotify tracks or songs.  
-◇  You can directly provide the Spotify link, and I’ll find a YouTube alternative with the same audio and download it for you.
-</i>
-<b>/insta</b>  
-<i>To download Instagram reels, videos, public stories, images, or posters.  
-◇  You can directly provide the link.  
-◇  You can also use the inline feature for this.
-</i>
-<b>/dl</b>  
-<i>To download any link (except yt.).  
-◇  You can directly provide the link.  
-◇  supports 2k+ sites.
- 
+Swift, silent, precise — your all-in-one media downloader.
 
+**∷ Supported Platforms**
+┣ ◈ __YouTube__  — videos, shorts & audio
+┣ ◈ __Spotify__  — tracks via YouTube mirror
+┣ ◈ __Instagram__ — reels, posts & stories
+┗ ◈ __Universal__ — 2000+ sites via `/dl`
+
+✦ Just send a link — or tap **⌤ Commands** to explore.
 """
+
+# ──────────────────────────────────────────────
+#  COMMANDS MENU
+# ──────────────────────────────────────────────
+COMMAND_CAPTION = """
+**━━━〔 Command Categories 〕━━━**
+
+Select a category below to view its commands.
+
+┣ ⚜ **DLP**  — Downloader commands
+┣ ⚜ **Users**  — General commands
+┣ ⚜ **Sudo**  — Admin tools _(restricted)_
+┗ ⚜ **Developer**  — Dev tools _(restricted)_
+
+✦ _Tip: You can send any supported URL directly — no command needed._
+"""
+
+# ──────────────────────────────────────────────
+#  DLP COMMANDS
+# ──────────────────────────────────────────────
+DLP_TEXT = """
+<b>━━━〔 Dlp Commands 〕━━━</b>
+
+<b>/yt</b> <code>&lt;url / query&gt;</code>
+<i>◇ Download YouTube videos, Shorts, or audio.
+◇ Choose format and quality interactively.
+◇ Also works inline via @Quick_dlbot.</i>
+
+<b>/spotify</b> <code>&lt;url&gt;</code>
+<i>◇ Download Spotify tracks.
+◇ Automatically mirrors the best YouTube audio.</i>
+
+<b>/insta</b> <code>&lt;url&gt;</code>
+<i>◇ Download Instagram reels, posts, stories, or images.
+◇ Inline support available.</i>
+
+<b>/dl</b> <code>&lt;url&gt;</code>
+<i>◇ Universal downloader — supports 2000+ websites.
+◇ Use this for any platform not listed above.</i>
+
+━━━━━━━━━━━━━━━━
+✦ <i>For YouTube, select video quality and format before downloading.</i>
+"""
+
+# ──────────────────────────────────────────────
+#  USER COMMANDS
+# ──────────────────────────────────────────────
+USER_TEXT = """
+━━━〔 User Commands 〕━━━
+
+✦ General
+┣ /start · /help
+  ↳ Show the welcome menu.
+┗ /ping · /alive
+  ↳ Check bot latency and uptime.
+
+✦ Downloaders
+┣ /dl <url>
+  ↳ Universal link downloader (2000+ sites).
+┣ /yt <url>
+  ↳ YouTube video or audio download.
+┣ /spotify <url>
+  ↳ Spotify track download.
+┗ /insta <url>
+  ↳ Instagram reels, posts and stories.
+
+✦ YouTube Extras
+┣ /music · /search · /play <query>
+  ↳ Search YouTube and pick a track to download.
+┣ /ytstats
+  ↳ Show YouTube downloader usage statistics.
+┗ /clean_ytcache
+  ↳ Clear the YouTube downloader cache manually.
+
+✦ Utilities
+┣ /paste
+  ↳ Paste text or images with formatting options.
+┣ /id
+  ↳ Get info about a user, chat, or forwarded message.
+┗ /ighelp
+  ↳ Detailed Instagram downloader guide.
+"""
+
+# ──────────────────────────────────────────────
+#  SUDO COMMANDS
+# ──────────────────────────────────────────────
+SUDO_TEXT = """
+━━━〔 Sudo Commands 〕━━━
+
+✦ Management
+┣ /users · /serverstats
+  ↳ Control panel — view users, stats and admin actions.
+┗ /stats
+  ↳ Live server resource stats (CPU, RAM, disk).
+
+✦ Database
+┗ /dbstats
+  ↳ MongoDB statistics — collections and usage.
+
+✦ Logs & Files
+┣ /log · /logs
+  ↳ Open the log management panel.
+┣ /catch
+  ↳ Browse and manage temporary cached files.
+┗ /inspect
+  ↳ Dump full message details as JSON.
+
+✦ Network & Tools
+┣ /speedtest · /speed
+  ↳ Run a speedtest on the host server.
+┗ /cookie <pastebinUrl>
+  ↳ Import cookies via a Base64-encoded Pastebin URL.
+"""
+
+# ──────────────────────────────────────────────
+#  DEVELOPER COMMANDS
+# ──────────────────────────────────────────────
 DEV_TEXT = """
 ━━━〔 Developer Commands 〕━━━
 
 - /update
-  ↳ Update the bot to the latest commit from the repository.
+  ↳ Pull the latest commit and restart the bot.
 
-- /shell | /sh
-  ↳ Execute terminal commands directly via the bot.
+- /shell · /sh <cmd>
+  ↳ Execute a terminal command directly via the bot.
 
-- /exec | /py
-  ↳ Execute Python code via the bot with a built-in refresh button.
+- /exec · /py <code>
+  ↳ Run Python code with a built-in refresh button.
 
 - /broadcast
-  ↳ Broadcast a message to all bot users and groups.
+  ↳ Send a message to all users and groups.
 
 - /render
-  ↳ It control render feature .
-
+  ↳ Toggle or control the render feature.
 """
 
-SUDO_TEXT = """
-━━━〔 Sudo Commands 〕━━━
+# ──────────────────────────────────────────────
+#  ABOUT
+# ──────────────────────────────────────────────
+ABOUT_CAPTION = f"""
+━━━〔 About Quick DL 〕━━━
 
-- /users | /serverstats
-  ↳ control panel to view users, view stats, and perform admin actions.
+◈ Swift, open-source media downloader for Telegram.
+◈ Built for reliability, speed and ease of use.
 
-- /stats | /serverstats
-  ↳ Get server resource stats (CPU, RAM, disk, etc).
+✦ Runtime
+┣ Python      {__python_version__}
+┣ Pyrogram    {__pyro_version__}
+┗ Bot version {__version__}
 
-- /dbstats
-  ↳ Get MongoDB database statistics including collections and usage.
+✦ Legal
+┣ License : {__license__}
+┣ Privacy Policy  — see below
+┗ Code of Conduct — see below
 
-- /log | /logs
-  ↳ Open the log management control panel.
-
-- /inspect
-  ↳ Inspect a message and return full details in JSON format.
-
-- /catch
-  ↳ Open the catch file manager to browse and manage temporary files.
-
-- /cookie | /cookies <pastebinUrl>
-  ↳ Import new cookies via a Base64-encoded Pastebin URL.
-
-- /speedtest | /speed
-  ↳ Run a speedtest on the server where the bot is hosted.
+∴ Crafted with precision by RKgroup
 """
 
-USER_TEXT = """
-━━━〔 User Commands 〕━━━
-
-- /start | /help
-  ↳ Start the bot or get the help menu.
-
-- /ping | /alive
-  ↳ Check Telegram API ping speed and bot uptime.
-
-- /dl <url>
-  ↳ Download media from a supported URL (auto-detects platform).
-
-- /youtube | /yt | /ytdl <url>
-  ↳ Download a YouTube video or audio by URL.
-
-- /music | /search | /play <query>
-  ↳ Search YouTube for music tracks and pick one to download.
-
-- /ytstats
-  ↳ Show YouTube downloader usage statistics.
-
-- /clean_ytcache
-  ↳ Clear the YouTube downloader cache manually.
-
-- /spotify | /spt | /sptdlp | /dlmusic <url>
-  ↳ Download a Spotify track by intercepting the Spotify link.
-
-- /instagram | /insta | /igdl <url>
-  ↳ Download Instagram reels, posts, or stories by URL.
-
-- /ighelp
-  ↳ Get detailed help about the Instagram downloader feature.
-
-- /paste
-  ↳ Paste text or images with interactive formatting options.
-
-- /id
-  ↳ Get detailed info about a user, message, chat, or forwarded content.
-"""
-
-ABOUT_CAPTION = f"""• Python version : {__python_version__}
-• 𝙱𝚘𝚝 𝚟𝚎𝚛𝚜𝚒𝚘𝚗: {__version__}
-• 𝚙𝚢𝚛𝚘𝚐𝚛𝚊𝚖  𝚟𝚎𝚛𝚜𝚒𝚘𝚗 : {__pyro_version__}
-• 𝙻𝚒𝚌𝚎𝚗𝚜𝚎 : {__license__}
-"""
-
+# ──────────────────────────────────────────────
+#  MISC
+# ──────────────────────────────────────────────
 START_ANIMATION = "https://images.app.goo.gl/hjN3cqtM43Bs95fJ6"
-
-START_CAPTION = """
-♔ **Step into a world of swift downloads**.\nfrom __Instagram__ to __Spotify__ to __Youtube__, I deliver with professional precision.
-"""
-
-
-COMMAND_CAPTION = """**𝙷𝚎𝚛𝚎 𝚊𝚛𝚎 𝚝𝚑𝚎 𝚕𝚒𝚜𝚝 𝚘𝚏 𝚌𝚘𝚖𝚖𝚊𝚗𝚍𝚜 𝚠𝚑𝚒𝚌𝚑 𝚢𝚘𝚞 𝚌𝚊𝚗 𝚞𝚜𝚎 𝚒𝚗 𝚋𝚘𝚝.\n**"""
