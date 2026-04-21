@@ -19,6 +19,6 @@ spotipy
 ffmpeg
 mutagen
 pyotp
-yt-dlp[default]>=2025.11.12
+yt-dlp[default]>=2026.3.17
 aiohttp
 pydantic
